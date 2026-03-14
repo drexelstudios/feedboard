@@ -10,7 +10,7 @@ async function buildVercel() {
 
   console.log("building api/index.js for Vercel (fully bundled)...");
   await esbuild({
-    entryPoints: ["api/index.ts"],
+    entryPoints: ["server/vercel-handler.ts"],
     platform: "node",
     bundle: true,
     format: "cjs",
