@@ -21,9 +21,43 @@ const parser = new Parser({
 const feedCache: Map<number, { items: any[]; fetchedAt: number }> = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * Fetch raw XML and sanitize common malformed patterns before parsing.
+ * Fixes bare & characters (e.g. "foo & bar" → "foo &amp; bar") that
+ * break strict XML parsers like rss-parser.
+ */
+async function fetchAndParse(url: string) {
+  // First try the normal way — fast path for well-formed feeds
+  try {
+    return await parser.parseURL(url);
+  } catch (e: any) {
+    // Only attempt XML repair for parse errors, not network errors
+    const msg = e?.message || "";
+    const isXmlError = msg.includes("Invalid character") || msg.includes("not well-formed") ||
+      msg.includes("mismatched tag") || msg.includes("entity") || msg.includes("undefined entity");
+    if (!isXmlError) throw e;
+  }
+
+  // Fetch raw XML and clean it up
+  const resp = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (compatible; RSSAggregator/1.0)",
+      "Accept": "application/rss+xml, application/xml, text/xml, */*",
+    },
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  let xml = await resp.text();
+
+  // Fix bare & not followed by a valid entity reference or #
+  xml = xml.replace(/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)/g, "&amp;");
+
+  return await parser.parseString(xml);
+}
+
 async function fetchFeedItems(url: string): Promise<any[]> {
   try {
-    const feed = await parser.parseURL(url);
+    const feed = await fetchAndParse(url);
     return (feed.items || []).map((item: any) => ({
       title: item.title || "Untitled",
       link: item.link || item.guid || "",
@@ -111,7 +145,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
     try {
-      const feed = await parser.parseURL(url);
+      const feed = await fetchAndParse(url);
       res.json({
         title: feed.title || "",
         description: feed.description || "",
