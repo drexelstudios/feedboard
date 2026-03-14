@@ -9,22 +9,29 @@ import { AuthProvider, useAuth } from "@/components/AuthProvider";
 import { apiRequest } from "@/lib/queryClient";
 import Dashboard from "@/pages/Dashboard";
 import AuthPage from "@/pages/AuthPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/not-found";
 
 function AppRoutes() {
   const { session, loading } = useAuth();
-  const [, navigate] = useLocation();
   const seededRef = useRef(false);
+
+  // If Supabase redirected here for password reset, show that page regardless of auth state
+  const isResetFlow =
+    window.location.pathname === "/reset-password" ||
+    window.location.hash.includes("type=recovery");
 
   // Seed default data once after first sign-in
   useEffect(() => {
-    if (session && !seededRef.current) {
+    if (session && !seededRef.current && !isResetFlow) {
       seededRef.current = true;
-      apiRequest("POST", "/api/auth/seed").catch(() => {
-        // Silently ignore — user may already have data
-      });
+      apiRequest("POST", "/api/auth/seed").catch(() => {});
     }
-  }, [session]);
+  }, [session, isResetFlow]);
+
+  if (isResetFlow) {
+    return <ResetPasswordPage />;
+  }
 
   if (loading) {
     return (
@@ -33,7 +40,7 @@ function AppRoutes() {
         style={{ background: "hsl(var(--background))" }}
       >
         <div
-          className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+          className="w-8 h-8 rounded-full border-2 animate-spin"
           style={{ borderColor: "hsl(var(--primary))", borderTopColor: "transparent" }}
         />
       </div>
