@@ -2,7 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import Parser from "rss-parser";
 import { storage } from "./storage";
-import { insertFeedSchema, insertCategorySchema } from "@shared/schema";
+import { insertFeedSchema, insertCategorySchema } from "../shared/schema";
 import { z } from "zod";
 
 const parser = new Parser({
