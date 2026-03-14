@@ -1,9 +1,6 @@
 {
   "version": 2,
   "buildCommand": "npm run build:vercel",
-  "outputDirectory": "dist/public",
-  "installCommand": "npm ci",
-  "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ]
+  "outputDirectory": ".vercel/output",
+  "installCommand": "npm ci"
 }
