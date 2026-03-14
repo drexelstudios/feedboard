@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { Feed, InsertFeed, Category, InsertCategory } from "@shared/schema";
+import { Feed, InsertFeed, Category, InsertCategory } from "../shared/schema";
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
