@@ -1,20 +1,10 @@
-import { execSync } from "child_process";
+import { createClient } from "@supabase/supabase-js";
 import { Feed, InsertFeed, Category, InsertCategory } from "@shared/schema";
 
-// ── Supabase helper via external-tool CLI ─────────────────────────────────────
-function supabase(tool: string, args: Record<string, unknown>): any {
-  const payload = JSON.stringify({ source_id: "supabase__pipedream", tool_name: tool, arguments: args });
-  try {
-    const out = execSync(`external-tool call '${payload.replace(/'/g, "'\\''")}'`, {
-      encoding: "utf-8",
-      timeout: 15000,
-    });
-    return JSON.parse(out);
-  } catch (e: any) {
-    console.error("Supabase tool error:", e.message);
-    throw new Error("Database error: " + e.message);
-  }
-}
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ── Storage interface ─────────────────────────────────────────────────────────
 export interface IStorage {
@@ -32,27 +22,28 @@ export interface IStorage {
 // ── Supabase-backed storage ───────────────────────────────────────────────────
 export class SupabaseStorage implements IStorage {
   async getFeeds(): Promise<Feed[]> {
-    const res = supabase("supabase-select-row", { table: "feeds", orderBy: "position", max: 200 });
-    return (res.data || []).map(mapFeed);
+    const { data, error } = await supabase
+      .from("feeds")
+      .select("*")
+      .order("position", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || []).map(mapFeed);
   }
 
   async getFeed(id: number): Promise<Feed | undefined> {
-    const res = supabase("supabase-select-row", {
-      table: "feeds",
-      column: "id",
-      filter: "equalTo",
-      value: String(id),
-      orderBy: "position",
-      max: 1,
-    });
-    const row = (res.data || [])[0];
-    return row ? mapFeed(row) : undefined;
+    const { data, error } = await supabase
+      .from("feeds")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) return undefined;
+    return data ? mapFeed(data) : undefined;
   }
 
   async createFeed(feed: InsertFeed): Promise<Feed> {
-    const res = supabase("supabase-insert-row", {
-      table: "feeds",
-      data: {
+    const { data, error } = await supabase
+      .from("feeds")
+      .insert({
         url: feed.url,
         title: feed.title,
         description: feed.description ?? "",
@@ -61,76 +52,69 @@ export class SupabaseStorage implements IStorage {
         position: feed.position ?? 999,
         collapsed: feed.collapsed ?? false,
         max_items: feed.maxItems ?? 10,
-      },
-    });
-    if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
-    return mapFeed(res.data[0]);
+      })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return mapFeed(data);
   }
 
   async updateFeed(id: number, update: Partial<InsertFeed>): Promise<Feed | undefined> {
-    const data: Record<string, unknown> = {};
-    if (update.title !== undefined) data.title = update.title;
-    if (update.url !== undefined) data.url = update.url;
-    if (update.description !== undefined) data.description = update.description;
-    if (update.favicon !== undefined) data.favicon = update.favicon;
-    if (update.category !== undefined) data.category = update.category;
-    if (update.position !== undefined) data.position = update.position;
-    if (update.collapsed !== undefined) data.collapsed = update.collapsed;
-    if (update.maxItems !== undefined) data.max_items = update.maxItems;
+    const patch: Record<string, unknown> = {};
+    if (update.title !== undefined) patch.title = update.title;
+    if (update.url !== undefined) patch.url = update.url;
+    if (update.description !== undefined) patch.description = update.description;
+    if (update.favicon !== undefined) patch.favicon = update.favicon;
+    if (update.category !== undefined) patch.category = update.category;
+    if (update.position !== undefined) patch.position = update.position;
+    if (update.collapsed !== undefined) patch.collapsed = update.collapsed;
+    if (update.maxItems !== undefined) patch.max_items = update.maxItems;
 
-    const res = supabase("supabase-update-row", {
-      table: "feeds",
-      column: "id",
-      value: String(id),
-      data,
-    });
-    if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
-    const row = (res.data || [])[0];
-    return row ? mapFeed(row) : undefined;
+    const { data, error } = await supabase
+      .from("feeds")
+      .update(patch)
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data ? mapFeed(data) : undefined;
   }
 
   async deleteFeed(id: number): Promise<boolean> {
-    const res = supabase("supabase-delete-row", {
-      table: "feeds",
-      column: "id",
-      value: String(id),
-    });
-    return !res.error;
+    const { error } = await supabase.from("feeds").delete().eq("id", id);
+    return !error;
   }
 
   async reorderFeeds(ids: number[]): Promise<void> {
-    // Update each feed's position — run sequentially to avoid conflicts
-    for (let i = 0; i < ids.length; i++) {
-      supabase("supabase-update-row", {
-        table: "feeds",
-        column: "id",
-        value: String(ids[i]),
-        data: { position: i },
-      });
-    }
+    await Promise.all(
+      ids.map((id, i) =>
+        supabase.from("feeds").update({ position: i }).eq("id", id)
+      )
+    );
   }
 
   async getCategories(): Promise<Category[]> {
-    const res = supabase("supabase-select-row", { table: "categories", orderBy: "position", max: 100 });
-    return (res.data || []).map(mapCategory);
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .order("position", { ascending: true });
+    if (error) throw new Error(error.message);
+    return (data || []).map(mapCategory);
   }
 
   async createCategory(cat: InsertCategory): Promise<Category> {
-    const res = supabase("supabase-insert-row", {
-      table: "categories",
-      data: { name: cat.name, position: cat.position ?? 99 },
-    });
-    if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
-    return mapCategory(res.data[0]);
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({ name: cat.name, position: cat.position ?? 99 })
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return mapCategory(data);
   }
 
   async deleteCategory(id: number): Promise<boolean> {
-    const res = supabase("supabase-delete-row", {
-      table: "categories",
-      column: "id",
-      value: String(id),
-    });
-    return !res.error;
+    const { error } = await supabase.from("categories").delete().eq("id", id);
+    return !error;
   }
 }
 
