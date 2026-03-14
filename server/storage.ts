@@ -16,7 +16,8 @@ export interface IStorage {
   reorderFeeds(ids: number[], userId: string): Promise<void>;
   getCategories(userId: string): Promise<Category[]>;
   createCategory(cat: InsertCategory, userId: string): Promise<Category>;
-  deleteCategory(id: number, userId: string): Promise<boolean>;
+  renameCategory(id: number, name: string, userId: string): Promise<Category | undefined>;
+  deleteCategory(id: number, userId: string, replaceName?: string): Promise<boolean>;
   seedDefaultData(userId: string): Promise<void>;
 }
 
@@ -134,7 +135,56 @@ export class SupabaseStorage implements IStorage {
     return mapCategory(data);
   }
 
-  async deleteCategory(id: number, userId: string): Promise<boolean> {
+  async renameCategory(id: number, name: string, userId: string): Promise<Category | undefined> {
+    // Also rename the category string on all feeds in this category
+    const existing = await supabase
+      .from("categories")
+      .select("name")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+    if (existing.error || !existing.data) return undefined;
+
+    const oldName = existing.data.name;
+
+    // Update feeds that use the old category name
+    await supabase
+      .from("feeds")
+      .update({ category: name })
+      .eq("category", oldName)
+      .eq("user_id", userId);
+
+    const { data, error } = await supabase
+      .from("categories")
+      .update({ name })
+      .eq("id", id)
+      .eq("user_id", userId)
+      .select()
+      .single();
+    if (error) return undefined;
+    return mapCategory(data);
+  }
+
+  async deleteCategory(id: number, userId: string, replaceName?: string): Promise<boolean> {
+    // Get category name before deleting
+    const existing = await supabase
+      .from("categories")
+      .select("name")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .single();
+
+    if (!existing.error && existing.data) {
+      const catName = existing.data.name;
+      const target = replaceName ?? "General";
+      // Move feeds to replacement category
+      await supabase
+        .from("feeds")
+        .update({ category: target })
+        .eq("category", catName)
+        .eq("user_id", userId);
+    }
+
     const { error } = await supabase.from("categories").delete().eq("id", id).eq("user_id", userId);
     return !error;
   }
