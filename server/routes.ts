@@ -64,6 +64,33 @@ export function registerRoutes(httpServer: Server, app: Express) {
     res.json(feed);
   });
 
+  // Preview must come before /:id routes so Express doesn't treat "preview" as an id
+  app.post("/api/feeds/preview", async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "url required" });
+    try {
+      const feed = await parser.parseURL(url);
+      res.json({
+        title: feed.title || "",
+        description: feed.description || "",
+        items: (feed.items || []).slice(0, 3).map((item: any) => ({
+          title: item.title || "",
+          pubDate: item.pubDate || "",
+        })),
+      });
+    } catch (e: any) {
+      res.status(400).json({ error: "Could not parse RSS feed: " + e.message });
+    }
+  });
+
+  // Reorder must also come before /:id routes
+  app.post("/api/feeds/reorder", async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids)) return res.status(400).json({ error: "ids required" });
+    await storage.reorderFeeds(ids);
+    res.json({ success: true });
+  });
+
   app.patch("/api/feeds/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     const feed = await storage.updateFeed(id, req.body);
@@ -76,13 +103,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
     feedCache.delete(id);
     const ok = await storage.deleteFeed(id);
     if (!ok) return res.status(404).json({ error: "Not found" });
-    res.json({ success: true });
-  });
-
-  app.post("/api/feeds/reorder", async (req, res) => {
-    const { ids } = req.body;
-    if (!Array.isArray(ids)) return res.status(400).json({ error: "ids required" });
-    await storage.reorderFeeds(ids);
     res.json({ success: true });
   });
 
@@ -111,25 +131,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const items = await fetchFeedItems(feed.url);
     feedCache.set(id, { items, fetchedAt: Date.now() });
     res.json({ items: items.slice(0, feed.maxItems) });
-  });
-
-  // Preview a feed URL before adding
-  app.post("/api/feeds/preview", async (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "url required" });
-    try {
-      const feed = await parser.parseURL(url);
-      res.json({
-        title: feed.title || "",
-        description: feed.description || "",
-        items: (feed.items || []).slice(0, 3).map((item: any) => ({
-          title: item.title || "",
-          pubDate: item.pubDate || "",
-        })),
-      });
-    } catch (e: any) {
-      res.status(400).json({ error: "Could not parse RSS feed: " + e.message });
-    }
   });
 
   // ── Categories ─────────────────────────────────────────────────────────────
