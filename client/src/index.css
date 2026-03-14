@@ -1,0 +1,344 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens ─────────────────────────────────────────────────────────── */
+:root {
+  /* Type */
+  --text-xs:   clamp(0.75rem,  0.7rem  + 0.25vw, 0.875rem);
+  --text-sm:   clamp(0.875rem, 0.8rem  + 0.35vw, 1rem);
+  --text-base: clamp(1rem,     0.95rem + 0.25vw, 1.125rem);
+  --text-lg:   clamp(1.125rem, 1rem    + 0.75vw, 1.5rem);
+  --text-xl:   clamp(1.5rem,   1.2rem  + 1.25vw, 2.25rem);
+
+  /* Spacing */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Fonts */
+  --font-display: 'Cabinet Grotesk', 'Inter', sans-serif;
+  --font-body: 'Satoshi', 'Inter', sans-serif;
+
+  /* Radius */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-full: 9999px;
+
+  /* Transition */
+  --transition-interactive: 160ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.16);
+
+  /* Content widths */
+  --content-default: 960px;
+  --content-wide: 1400px;
+}
+
+/* ── Light Mode ─────────────────────────────────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  --background:        200 15% 97%;
+  --foreground:        215 25% 12%;
+  --card:              0 0% 100%;
+  --card-foreground:   215 25% 12%;
+  --popover:           0 0% 100%;
+  --popover-foreground: 215 25% 12%;
+  --primary:           217 91% 48%;
+  --primary-foreground: 0 0% 100%;
+  --secondary:         215 14% 94%;
+  --secondary-foreground: 215 25% 20%;
+  --muted:             215 14% 94%;
+  --muted-foreground:  215 14% 48%;
+  --accent:            217 91% 94%;
+  --accent-foreground: 217 91% 30%;
+  --destructive:       0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border:            215 14% 88%;
+  --input:             215 14% 88%;
+  --ring:              217 91% 48%;
+  --radius: 0.5rem;
+
+  /* Custom semantic */
+  --color-bg: hsl(200, 15%, 97%);
+  --color-surface: hsl(0, 0%, 100%);
+  --color-surface-2: hsl(215, 14%, 98%);
+  --color-surface-offset: hsl(215, 14%, 94%);
+  --color-surface-dynamic: hsl(215, 14%, 90%);
+  --color-border: hsl(215, 14%, 88%);
+  --color-text: hsl(215, 25%, 12%);
+  --color-text-muted: hsl(215, 14%, 48%);
+  --color-text-faint: hsl(215, 14%, 72%);
+  --color-primary: hsl(217, 91%, 48%);
+  --color-primary-hover: hsl(217, 91%, 40%);
+  --color-primary-highlight: hsl(217, 91%, 94%);
+  --color-success: hsl(142, 72%, 29%);
+  --color-error: hsl(0, 72%, 51%);
+  --color-warning: hsl(38, 92%, 50%);
+}
+
+/* ── Dark Mode ──────────────────────────────────────────────────────────────── */
+.dark,
+[data-theme="dark"] {
+  --background:        222 22% 10%;
+  --foreground:        215 20% 86%;
+  --card:              222 22% 13%;
+  --card-foreground:   215 20% 86%;
+  --popover:           222 22% 13%;
+  --popover-foreground: 215 20% 86%;
+  --primary:           217 91% 60%;
+  --primary-foreground: 222 22% 8%;
+  --secondary:         222 15% 18%;
+  --secondary-foreground: 215 20% 70%;
+  --muted:             222 15% 18%;
+  --muted-foreground:  215 14% 52%;
+  --accent:            217 30% 22%;
+  --accent-foreground: 217 91% 70%;
+  --destructive:       0 62% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border:            222 15% 20%;
+  --input:             222 15% 20%;
+  --ring:              217 91% 60%;
+
+  --color-bg: hsl(222, 22%, 10%);
+  --color-surface: hsl(222, 22%, 13%);
+  --color-surface-2: hsl(222, 22%, 15%);
+  --color-surface-offset: hsl(222, 15%, 18%);
+  --color-surface-dynamic: hsl(222, 15%, 22%);
+  --color-border: hsl(222, 15%, 20%);
+  --color-text: hsl(215, 20%, 86%);
+  --color-text-muted: hsl(215, 14%, 52%);
+  --color-text-faint: hsl(215, 14%, 35%);
+  --color-primary: hsl(217, 91%, 60%);
+  --color-primary-hover: hsl(217, 91%, 68%);
+  --color-primary-highlight: hsl(217, 30%, 22%);
+  --color-success: hsl(142, 60%, 45%);
+  --color-error: hsl(0, 62%, 55%);
+  --color-warning: hsl(38, 92%, 55%);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+}
+
+/* ── System preference fallback ─────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --background:        222 22% 10%;
+    --foreground:        215 20% 86%;
+    --card:              222 22% 13%;
+    --card-foreground:   215 20% 86%;
+    --popover:           222 22% 13%;
+    --popover-foreground: 215 20% 86%;
+    --primary:           217 91% 60%;
+    --primary-foreground: 222 22% 8%;
+    --secondary:         222 15% 18%;
+    --secondary-foreground: 215 20% 70%;
+    --muted:             222 15% 18%;
+    --muted-foreground:  215 14% 52%;
+    --accent:            217 30% 22%;
+    --accent-foreground: 217 91% 70%;
+    --destructive:       0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border:            222 15% 20%;
+    --input:             222 15% 20%;
+    --ring:              217 91% 60%;
+  }
+}
+
+/* ── Base Reset ─────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100dvh;
+  line-height: 1.6;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+/* ── Skeletons ──────────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0 }
+  100% { background-position: 200% 0 }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-offset) 25%,
+    var(--color-surface-dynamic) 50%,
+    var(--color-surface-offset) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Feed grid ──────────────────────────────────────────────────────────────── */
+.feed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+/* ── Feed widget ─────────────────────────────────────────────────────────────── */
+.feed-widget {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: box-shadow var(--transition-interactive),
+              border-color var(--transition-interactive);
+}
+.feed-widget:hover {
+  box-shadow: var(--shadow-md);
+  border-color: hsl(var(--border));
+}
+.feed-widget.dragging {
+  box-shadow: var(--shadow-lg);
+  opacity: 0.85;
+  cursor: grabbing;
+  z-index: 9999;
+}
+
+/* ── Widget header ──────────────────────────────────────────────────────────── */
+.widget-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid hsl(var(--border));
+  cursor: grab;
+  user-select: none;
+  background: hsl(var(--card));
+}
+.widget-header:active {
+  cursor: grabbing;
+}
+.widget-header .favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.widget-header .feed-title {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: hsl(var(--foreground));
+}
+.widget-actions {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-interactive);
+  flex-shrink: 0;
+}
+.feed-widget:hover .widget-actions,
+.feed-widget:focus-within .widget-actions {
+  opacity: 1;
+}
+
+/* ── Feed items list ─────────────────────────────────────────────────────────── */
+.feed-items {
+  list-style: none;
+  overflow: hidden;
+}
+.feed-item {
+  border-bottom: 1px solid hsl(var(--border));
+  transition: background var(--transition-interactive);
+}
+.feed-item:last-child {
+  border-bottom: none;
+}
+.feed-item a {
+  display: block;
+  padding: var(--space-3) var(--space-4);
+  text-decoration: none;
+  color: inherit;
+}
+.feed-item a:hover {
+  background: hsl(var(--accent));
+}
+.feed-item-title {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.35;
+  color: hsl(var(--foreground));
+  margin-bottom: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.feed-item-meta {
+  font-size: var(--text-xs);
+  color: hsl(var(--muted-foreground));
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.feed-item-summary {
+  font-size: var(--text-xs);
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+  margin-top: var(--space-1);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── Category tab ────────────────────────────────────────────────────────────── */
+.category-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Animations ──────────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-in {
+  animation: fadeIn 200ms ease-out both;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
+
+/* ── Drag overlay fix ────────────────────────────────────────────────────────── */
+[data-dnd-kit-drag-overlay] {
+  pointer-events: none;
+}
