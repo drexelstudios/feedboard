@@ -336,10 +336,13 @@ export function registerRoutes(httpServer: Server, app: Express) {
       }
 
       // 2. Run Mozilla Readability via JSDOM
-      // Lazy-load heavy DOM packages only when this handler is invoked (avoids cold-start crash).
-      const { JSDOM } = await import("jsdom");
-      const { Readability } = await import("@mozilla/readability");
-      const { default: DOMPurify } = await import("isomorphic-dompurify");
+      // Use require() — these are CJS packages external to the esbuild bundle.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { JSDOM } = require("jsdom") as typeof import("jsdom");
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { Readability } = require("@mozilla/readability") as typeof import("@mozilla/readability");
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const DOMPurify = (require("isomorphic-dompurify") as typeof import("isomorphic-dompurify")).default;
       const dom = new JSDOM(html, { url });
       const reader = new Readability(dom.window.document);
       const article = reader.parse();
