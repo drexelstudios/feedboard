@@ -2,9 +2,8 @@ import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
 import Parser from "rss-parser";
 import { createClient } from "@supabase/supabase-js";
-import { JSDOM } from "jsdom";
-import { Readability } from "@mozilla/readability";
-import DOMPurify from "isomorphic-dompurify";
+// jsdom / readability / dompurify are loaded lazily inside /api/extract only.
+// Top-level imports of these packages crash the Vercel serverless bundle on cold start.
 import { storage } from "./storage";
 import { insertFeedSchema, insertCategorySchema } from "../shared/schema";
 import { z } from "zod";
@@ -335,6 +334,10 @@ export function registerRoutes(httpServer: Server, app: Express) {
       }
 
       // 2. Run Mozilla Readability via JSDOM
+      // Lazy-load heavy DOM packages only when this handler is invoked (avoids cold-start crash).
+      const { JSDOM } = await import("jsdom");
+      const { Readability } = await import("@mozilla/readability");
+      const { default: DOMPurify } = await import("isomorphic-dompurify");
       const dom = new JSDOM(html, { url });
       const reader = new Readability(dom.window.document);
       const article = reader.parse();
