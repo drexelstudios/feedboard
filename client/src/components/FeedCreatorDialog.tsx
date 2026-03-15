@@ -22,8 +22,23 @@ import {
   RefreshCw,
   Globe,
   AlertCircle,
+  Clock,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+const INTERVAL_OPTIONS = [
+  { value: 6,  label: "Every 6 hours" },
+  { value: 12, label: "Every 12 hours" },
+  { value: 24, label: "Once a day" },
+  { value: 48, label: "Every 2 days" },
+];
 
 interface FeedCreatorDialogProps {
   open: boolean;
@@ -63,7 +78,15 @@ export default function FeedCreatorDialog({
   const [step, setStep] = useState<Step>("input");
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [intervalHours, setIntervalHours] = useState(24);
   const { toast } = useToast();
+
+  const intervalMutation = useMutation({
+    mutationFn: async ({ feedId, hours }: { feedId: string; hours: number }) => {
+      const res = await apiRequest("PATCH", `/api/scrape/feeds/${feedId}`, { scrape_interval_hours: hours });
+      return res.json();
+    },
+  });
 
   const scrapeMutation = useMutation({
     mutationFn: async ({ url, feedId }: { url: string; feedId?: string }) => {
@@ -116,11 +139,20 @@ export default function FeedCreatorDialog({
     handleClose();
   };
 
+  const handleIntervalChange = (value: string) => {
+    const hours = parseInt(value);
+    setIntervalHours(hours);
+    if (result?.feed?.id) {
+      intervalMutation.mutate({ feedId: result.feed.id, hours });
+    }
+  };
+
   const handleClose = () => {
     setUrl("");
     setStep("input");
     setResult(null);
     setCopied(false);
+    setIntervalHours(24);
     onOpenChange(false);
   };
 
@@ -340,6 +372,42 @@ export default function FeedCreatorDialog({
                 </div>
               </div>
             )}
+
+            {/* Scrape interval */}
+            <div
+              className="rounded-lg p-3 flex items-center justify-between gap-3"
+              style={{ background: "hsl(var(--muted))" }}
+            >
+              <div className="flex items-center gap-2">
+                <Clock size={14} style={{ color: "hsl(var(--muted-foreground))", flexShrink: 0 }} />
+                <div>
+                  <p className="text-xs font-medium" style={{ color: "hsl(var(--foreground))" }}>
+                    Auto-refresh
+                  </p>
+                  <p className="text-xs" style={{ color: "hsl(var(--muted-foreground))" }}>
+                    How often to re-scan for new posts
+                  </p>
+                </div>
+              </div>
+              <Select
+                value={String(intervalHours)}
+                onValueChange={handleIntervalChange}
+              >
+                <SelectTrigger
+                  className="w-36 h-7 text-xs"
+                  data-testid="select-interval"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVAL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={String(opt.value)} className="text-xs">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {/* Actions */}
             <div className="flex gap-2 pt-1">
