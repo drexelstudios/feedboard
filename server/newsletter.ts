@@ -158,13 +158,14 @@ export interface NewsletterFetchResult {
  * Connects to the configured IMAP inbox, processes up to BATCH_SIZE unread
  * emails, stores raw HTML in feed_items, and marks each as SEEN.
  *
+ * Also runs a recovery pass: any feed_items row with body_html IS NULL is
+ * re-fetched from IMAP (even if SEEN) so that DB resets don't brick the inbox.
+ *
  * Called by:
  *   - POST /api/newsletter/sync (manual)
  *   - GET /api/cron/scrape (daily, wrapped in try/catch)
  *
  * userId: the Feedhunt user who owns this inbox connection.
- * For a shared inbox approach, userId is derived from the From address
- * matching a newsletter_sources row for any user.
  */
 export async function fetchNewsletters(userId: string): Promise<NewsletterFetchResult> {
   const result: NewsletterFetchResult = { processed: 0, skipped: 0, errors: [] };
@@ -180,6 +181,23 @@ export async function fetchNewsletters(userId: string): Promise<NewsletterFetchR
     return result;
   }
 
+  // ── Recovery pass: find DB rows where body_html is NULL ───────────────────
+  // These are items that were previously stored but had their content cleared
+  // (e.g., via a SQL reset). We collect their email_message_ids so we can
+  // re-fetch them from IMAP even though they're already SEEN.
+  const { data: nullBodyItems } = await supabaseAdmin
+    .from("feed_items")
+    .select("id, email_message_id")
+    .eq("user_id", userId)
+    .eq("source_type", "newsletter")
+    .is("body_html", null)
+    .not("email_message_id", "is", null)
+    .limit(BATCH_SIZE);
+
+  const recoveryMessageIds = new Set(
+    (nullBodyItems || []).map((r) => r.email_message_id as string).filter(Boolean)
+  );
+
   const client = new ImapFlow({
     host,
     port,
@@ -193,8 +211,13 @@ export async function fetchNewsletters(userId: string): Promise<NewsletterFetchR
     const lock = await client.getMailboxLock("INBOX");
 
     try {
-      // Fetch up to BATCH_SIZE unseen messages
+      // Build UID list:
+      //   1. All unseen messages (normal new-mail flow)
+      //   2. Any seen messages that match a recovery message-id
       const uids: number[] = [];
+      const seenUidsForRecovery: number[] = [];
+
+      // Pass 1: collect unseen UIDs
       for await (const msg of client.fetch(
         { seen: false },
         { uid: true, envelope: true },
@@ -204,12 +227,31 @@ export async function fetchNewsletters(userId: string): Promise<NewsletterFetchR
         if (uids.length >= BATCH_SIZE) break;
       }
 
-      if (uids.length === 0) {
-        return result; // inbox is empty or all read
+      // Pass 2: if we have recovery targets, scan ALL messages for matching message-ids
+      if (recoveryMessageIds.size > 0) {
+        for await (const msg of client.fetch(
+          { seen: true },
+          { uid: true, envelope: true },
+          { uid: true }
+        )) {
+          const mid = msg.envelope?.messageId;
+          if (mid && recoveryMessageIds.has(mid) && !uids.includes(msg.uid)) {
+            seenUidsForRecovery.push(msg.uid);
+          }
+          // Stop early once we've matched everything we need
+          if (seenUidsForRecovery.length >= recoveryMessageIds.size) break;
+        }
       }
 
-      // Process each message
-      for (const uid of uids) {
+      const allUids = [...uids, ...seenUidsForRecovery];
+
+      if (allUids.length === 0) {
+        return result; // nothing to process
+      }
+
+      // ── Process each UID ────────────────────────────────────────────────────
+      for (const uid of allUids) {
+        const isRecovery = seenUidsForRecovery.includes(uid);
         try {
           // Fetch full message
           const msg = await client.fetchOne(
@@ -240,18 +282,21 @@ export async function fetchNewsletters(userId: string): Promise<NewsletterFetchR
             continue;
           }
 
-          // Duplicate check by message-id
-          const { data: existing } = await supabaseAdmin
-            .from("feed_items")
-            .select("id")
-            .eq("email_message_id", messageId)
-            .maybeSingle();
+          // Duplicate check by message-id — but skip check for recovery UIDs
+          // (those rows already exist with body_html=NULL, that's why we're here)
+          if (!isRecovery) {
+            const { data: existing } = await supabaseAdmin
+              .from("feed_items")
+              .select("id")
+              .eq("email_message_id", messageId)
+              .maybeSingle();
 
-          if (existing) {
-            // Already stored — mark as seen and skip
-            await client.messageFlagsAdd({ uid }, ["\\Seen"], { uid: true });
-            result.skipped++;
-            continue;
+            if (existing) {
+              // Already stored — mark as seen and skip
+              await client.messageFlagsAdd({ uid }, ["\\Seen"], { uid: true });
+              result.skipped++;
+              continue;
+            }
           }
 
           // Resolve or create feed + newsletter_source
@@ -275,7 +320,7 @@ export async function fetchNewsletters(userId: string): Promise<NewsletterFetchR
           // Plain-text summary from first ~300 chars
           const summary = stripHtml(rawHtml).slice(0, 300);
 
-          // Store raw email HTML — Readability runs lazily when reading pane opens
+          // Upsert — always write body_html (new insert or recovery overwrite)
           const guid = messageId;
           const { error: upsertError } = await supabaseAdmin
             .from("feed_items")
@@ -307,19 +352,21 @@ export async function fetchNewsletters(userId: string): Promise<NewsletterFetchR
             continue;
           }
 
-          // Update newsletter_sources stats
-          await supabaseAdmin
-            .from("newsletter_sources")
-            .update({
-              last_received_at: dateReceived.toISOString(),
-              item_count: supabaseAdmin.rpc("increment_item_count", {
-                source_id: source.newsletterSourceId,
-              }),
-            })
-            .eq("id", source.newsletterSourceId);
+          // Update newsletter_sources stats (skip for recovery — count already correct)
+          if (!isRecovery) {
+            await supabaseAdmin
+              .from("newsletter_sources")
+              .update({
+                last_received_at: dateReceived.toISOString(),
+                item_count: supabaseAdmin.rpc("increment_item_count", {
+                  source_id: source.newsletterSourceId,
+                }),
+              })
+              .eq("id", source.newsletterSourceId);
 
-          // Mark as SEEN in IMAP — only after successful DB insert
-          await client.messageFlagsAdd({ uid }, ["\\Seen"], { uid: true });
+            // Mark as SEEN in IMAP — only after successful DB insert (new emails only)
+            await client.messageFlagsAdd({ uid }, ["\\Seen"], { uid: true });
+          }
 
           result.processed++;
         } catch (emailErr: any) {
