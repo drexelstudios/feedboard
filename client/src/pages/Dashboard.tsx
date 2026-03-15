@@ -589,3 +589,4 @@ function EmptyState({ onAdd, activeCategory }: { onAdd: () => void; activeCatego
     </div>
   );
 }
+
