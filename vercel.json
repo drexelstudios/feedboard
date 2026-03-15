@@ -2,5 +2,11 @@
   "version": 2,
   "buildCommand": "npm run build:vercel",
   "outputDirectory": ".vercel/output",
-  "installCommand": "npm ci"
+  "installCommand": "npm ci",
+  "crons": [
+    {
+      "path": "/api/cron/scrape",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
