@@ -41,16 +41,16 @@ import Header from "@/components/Header";
 import PerplexityAttribution from "@/components/PerplexityAttribution";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, LayoutGrid, Columns, MoreHorizontal, Pencil, Trash2, Check, X } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
-type Layout = "grid" | "columns";
+type Columns = 2 | 3 | 4;
 
 export default function Dashboard() {
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [layout, setLayout] = useState<Layout>(
-    () => (localStorage.getItem("feedboard:layout") as Layout) || "grid"
+  const [columns, setColumns] = useState<Columns>(
+    () => (parseInt(localStorage.getItem("feedboard:columns") || "3") as Columns)
   );
   const [activeCategory, setActiveCategory] = useState<string>(
     () => localStorage.getItem("feedboard:activeCategory") || "All"
@@ -135,7 +135,7 @@ export default function Dashboard() {
 
   // Persist active tab + layout to localStorage
   useEffect(() => { localStorage.setItem("feedboard:activeCategory", activeCategory); }, [activeCategory]);
-  useEffect(() => { localStorage.setItem("feedboard:layout", layout); }, [layout]);
+  useEffect(() => { localStorage.setItem("feedboard:columns", String(columns)); }, [columns]);
 
   // Focus rename input when it appears
   useEffect(() => {
@@ -367,37 +367,27 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Layout toggle */}
+          {/* Column count toggle */}
           <div
             className="flex items-center rounded-lg p-0.5 flex-shrink-0"
             style={{ background: "hsl(var(--muted))" }}
           >
-            <button
-              data-testid="layout-grid"
-              onClick={() => setLayout("grid")}
-              className={cn(
-                "p-1.5 rounded-md transition-all",
-                layout === "grid"
-                  ? "bg-card shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Grid layout"
-            >
-              <LayoutGrid size={14} />
-            </button>
-            <button
-              data-testid="layout-columns"
-              onClick={() => setLayout("columns")}
-              className={cn(
-                "p-1.5 rounded-md transition-all",
-                layout === "columns"
-                  ? "bg-card shadow-sm text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Columns layout"
-            >
-              <Columns size={14} />
-            </button>
+            {([2, 3, 4] as Columns[]).map((n) => (
+              <button
+                key={n}
+                data-testid={`layout-col-${n}`}
+                onClick={() => setColumns(n)}
+                className={cn(
+                  "w-7 h-7 rounded-md text-xs font-semibold transition-all",
+                  columns === n
+                    ? "bg-card shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+                title={`${n} columns`}
+              >
+                {n}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -424,27 +414,17 @@ export default function Dashboard() {
             >
               <div
                 className={cn(
-                  layout === "grid"
-                    ? "feed-grid"
-                    : "grid gap-4"
+                  columns === 2 ? "feed-masonry-2" :
+                  columns === 4 ? "feed-masonry-4" :
+                  "feed-masonry"
                 )}
-                style={
-                  layout === "columns"
-                    ? { gridTemplateColumns: "repeat(3, 1fr)" }
-                    : undefined
-                }
               >
-                {filteredFeeds.map((feed, i) => (
-                  <div
+                {filteredFeeds.map((feed) => (
+                  <FeedWidget
                     key={feed.id}
-                    className="animate-in"
-                    style={{ animationDelay: `${i * 30}ms` }}
-                  >
-                    <FeedWidget
-                      feed={feed}
-                      isDragging={activeId === feed.id}
-                    />
-                  </div>
+                    feed={feed}
+                    isDragging={activeId === feed.id}
+                  />
                 ))}
               </div>
             </SortableContext>
@@ -526,7 +506,7 @@ export default function Dashboard() {
 
 function SkeletonGrid() {
   return (
-    <div className="feed-grid">
+    <div className="feed-masonry">
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
