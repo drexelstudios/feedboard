@@ -21,16 +21,36 @@ async function buildVercel() {
   await mkdir(funcDir, { recursive: true });
 
   console.log("building api function for Vercel Build Output API...");
+
+  // Plugin: replace require.resolve("./xhr-sync-worker.js") with __filename.
+  // jsdom uses this to locate its XHR sync worker at runtime. When bundled,
+  // the file path is baked in as a string literal which breaks in Vercel's
+  // /var/task environment. We replace it with __filename (the bundle itself)
+  // which is a no-op for our usage — we never use synchronous XHR.
+  const patchXhrWorker = {
+    name: "patch-xhr-sync-worker",
+    setup(build: any) {
+      build.onLoad({ filter: /XMLHttpRequest-impl\.js$/ }, async (args: any) => {
+        const fs = await import("fs");
+        let contents = fs.readFileSync(args.path, "utf8");
+        contents = contents.replace(
+          /require\.resolve\(['"]\.\/xhr-sync-worker\.js['"]\)/g,
+          "__filename"
+        );
+        return { contents, loader: "js" };
+      });
+    },
+  };
+
   await esbuild({
     entryPoints: ["server/vercel-handler.ts"],
     platform: "node",
     bundle: true,
     format: "cjs",
     outfile: `${funcDir}/index.js`,
-    // Externalize jsdom + readability: they are large, rely on native file resolution
-    // (xhr-sync-worker.js), and must not be bundled inline.
-    // They are available in the Vercel Node.js runtime via node_modules.
-    external: ["jsdom", "@mozilla/readability", "isomorphic-dompurify"],
+    // Bundle everything inline — includeFiles is unreliable with Build Output API
+    external: [],
+    plugins: [patchXhrWorker],
     minify: false,
     logLevel: "info",
     loader: { ".node": "file" },
@@ -44,8 +64,6 @@ async function buildVercel() {
       handler: "index.js",
       launcherType: "Nodejs",
       maxDuration: 30,
-      // Include the externalized packages so they're available at runtime
-      includeFiles: "node_modules/{jsdom,@mozilla/readability,isomorphic-dompurify}/**",
     }, null, 2)
   );
 
