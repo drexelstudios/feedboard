@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { storage } from "./storage";
 import { insertFeedSchema, insertCategorySchema } from "../shared/schema";
 import { z } from "zod";
+import { scrapeFeed, generateSlug, uniqueSlug, cleanHtml, quickExtract } from "./scraper";
 
 const parser = new Parser({
   timeout: 10000,
@@ -233,9 +234,152 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   app.delete("/api/categories/:id", requireAuth, async (req, res) => {
     const id = parseInt(req.params.id);
-    const { replaceName } = req.body; // optional: move feeds to another category
+    const { replaceName } = req.body;
     const ok = await storage.deleteCategory(id, req.userId!, replaceName);
     if (!ok) return res.status(404).json({ error: "Not found" });
     res.json({ success: true });
+  });
+
+  // ── Feed Creator ────────────────────────────────────────────────────────────
+
+  // Quick client-side preview (no AI, instant)
+  app.post("/api/scrape/preview", requireAuth, async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: "url required" });
+    try {
+      const resp = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Feedboard/1.0)", "Accept": "text/html,*/*" },
+        signal: AbortSignal.timeout(10000),
+        redirect: "follow",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const html = await resp.text();
+      const cleaned = cleanHtml(html, url);
+      const items = quickExtract(html, url);
+      // Extract title from <title> tag
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      const siteTitle = titleMatch ? titleMatch[1].trim() : new URL(url).hostname;
+      res.json({ siteTitle, items: items.slice(0, 10) });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
+    }
+  });
+
+  // Full AI scrape — creates/updates scraped_feed record and runs Claude extraction
+  app.post("/api/scrape", requireAuth, async (req, res) => {
+    const { url, feedId } = req.body;
+    if (!url) return res.status(400).json({ error: "url required" });
+
+    let activeFeedId = feedId;
+
+    // If no feedId provided, create a new scraped_feed record
+    if (!activeFeedId) {
+      const baseSlug = generateSlug(url);
+      const slug = await uniqueSlug(baseSlug);
+      const { data, error } = await supabaseAdmin
+        .from("scraped_feeds")
+        .insert({
+          user_id: req.userId,
+          source_url: url,
+          feed_slug: slug,
+          site_title: new URL(url).hostname,
+        })
+        .select()
+        .single();
+      if (error) return res.status(500).json({ error: error.message });
+      activeFeedId = data.id;
+    }
+
+    const result = await scrapeFeed(url, activeFeedId, req.userId!);
+
+    // Return feed info + extracted posts
+    const { data: feedData } = await supabaseAdmin
+      .from("scraped_feeds")
+      .select("*")
+      .eq("id", activeFeedId)
+      .single();
+
+    const { data: posts } = await supabaseAdmin
+      .from("scraped_posts")
+      .select("*")
+      .eq("feed_id", activeFeedId)
+      .order("pub_date", { ascending: false })
+      .limit(20);
+
+    res.json({ ...result, feed: feedData, posts: posts || [] });
+  });
+
+  // List user's scraped feeds
+  app.get("/api/scrape/feeds", requireAuth, async (req, res) => {
+    const { data, error } = await supabaseAdmin
+      .from("scraped_feeds")
+      .select("*, scraped_posts(count)")
+      .eq("user_id", req.userId)
+      .order("created_at", { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  // Delete a scraped feed
+  app.delete("/api/scrape/feeds/:id", requireAuth, async (req, res) => {
+    const { error } = await supabaseAdmin
+      .from("scraped_feeds")
+      .delete()
+      .eq("id", req.params.id)
+      .eq("user_id", req.userId);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true });
+  });
+
+  // ── RSS XML endpoint (public — no auth required) ────────────────────────────
+  app.get("/api/feed/:slug", async (req, res) => {
+    const { slug } = req.params;
+
+    const { data: feed } = await supabaseAdmin
+      .from("scraped_feeds")
+      .select("*")
+      .eq("feed_slug", slug)
+      .single();
+
+    if (!feed) return res.status(404).send("Feed not found");
+
+    const { data: posts } = await supabaseAdmin
+      .from("scraped_posts")
+      .select("*")
+      .eq("feed_id", feed.id)
+      .order("pub_date", { ascending: false })
+      .limit(50);
+
+    const escXml = (s: string) =>
+      (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    const toRFC2822 = (d: string | null) => {
+      if (!d) return new Date().toUTCString();
+      try { return new Date(d).toUTCString(); } catch { return new Date().toUTCString(); }
+    };
+
+    const items = (posts || []).map((p) => `
+    <item>
+      <title>${escXml(p.title)}</title>
+      <link>${escXml(p.link)}</link>
+      <description>${escXml(p.description || "")}</description>
+      <pubDate>${toRFC2822(p.pub_date)}</pubDate>
+      <guid isPermaLink="true">${escXml(p.guid || p.link)}</guid>
+    </item>`).join("");
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>${escXml(feed.site_title || feed.feed_slug)}</title>
+    <link>${escXml(feed.source_url)}</link>
+    <description>${escXml(feed.site_description || "")}</description>
+    <lastBuildDate>${toRFC2822(feed.last_scraped_at)}</lastBuildDate>
+    <generator>Feedboard Feed Creator</generator>${items}
+  </channel>
+</rss>`;
+
+    res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
+    res.setHeader("Cache-Control", "public, s-maxage=900, stale-while-revalidate=1800");
+    res.send(xml);
   });
 }
