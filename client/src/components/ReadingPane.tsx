@@ -53,19 +53,15 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
   useEffect(() => {
     if (!isOpen || !item) return;
 
-    // Same item already shown — don't re-fetch
-    if (item.itemId === lastItemIdRef.current && extractResult && !extractResult.fallback) return;
-    lastItemIdRef.current = item.itemId;
+    // Same item already shown with good content — don't re-fetch.
+    // Use link as the stable key since itemId may be null on first open.
+    const itemKey = item.itemId ?? item.link;
+    if (itemKey === lastItemIdRef.current && extractResult && !extractResult.fallback) return;
+    lastItemIdRef.current = itemKey;
     setExtractResult(null);
 
-    if (!item.itemId) {
-      // Not upserted yet — fallback
-      setExtractResult({ fallback: true, error: "Article not yet indexed" });
-      return;
-    }
-
-    // If body already extracted, fetch cached version
-    if (item.hasBody) {
+    // If body already extracted and we have a stable DB id, serve from cache
+    if (item.hasBody && item.itemId) {
       setLoading(true);
       apiRequest("GET", `/api/feed-items/${item.itemId}`)
         .then((r) => (r as Response).json())
@@ -85,14 +81,19 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
       return;
     }
 
-    // Otherwise extract via Readability
+    // No URL means we truly can't do anything
     if (!item.link) {
       setExtractResult({ fallback: true, error: "No article URL" });
       return;
     }
 
+    // Extract via Readability. item_id may be null if the upsert hasn't completed yet —
+    // the server handles this gracefully (extracts but skips the DB persist).
     setLoading(true);
-    apiRequest("POST", "/api/extract", { url: item.link, item_id: item.itemId })
+    apiRequest("POST", "/api/extract", {
+      url: item.link,
+      ...(item.itemId ? { item_id: item.itemId } : {}),
+    })
       .then((r) => (r as Response).json())
       .then((data: ExtractResult) => setExtractResult(data))
       .catch(() => setExtractResult({ fallback: true, error: "Extraction failed" }))
