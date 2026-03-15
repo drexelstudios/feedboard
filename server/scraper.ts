@@ -7,7 +7,7 @@ const supabase = createClient(
 
 // ── HTML cleaning ──────────────────────────────────────────────────────────────
 export function cleanHtml(html: string, baseUrl: string): string {
-  // Remove unwanted tags entirely
+  // Remove unwanted tags entirely (including their content)
   let clean = html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
@@ -18,6 +18,18 @@ export function cleanHtml(html: string, baseUrl: string): string {
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<img[^>]*>/gi, "")
     .replace(/<picture[^>]*>[\s\S]*?<\/picture>/gi, "");
+
+  // Convert <a href="...">text</a> → [text](absoluteUrl) so Claude sees real URLs
+  clean = clean.replace(
+    /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
+    (_match, href, innerText) => {
+      const text = innerText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!text) return "";
+      let absUrl = href;
+      try { absUrl = new URL(href, baseUrl).href; } catch { /* keep */ }
+      return `[${text}](${absUrl}) `;
+    }
+  );
 
   // Strip all remaining tags but keep text content
   clean = clean.replace(/<[^>]+>/g, " ");
@@ -92,7 +104,7 @@ export async function extractWithClaude(
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4096,
-      system: `You are an RSS feed extraction engine. Analyze the HTML content and extract all blog posts, articles, or newsletter entries. For each post extract: title, link (absolute URL), description (brief summary if available), pubDate (ISO 8601 format if found, otherwise empty string). Return ONLY valid JSON with no markdown, no explanation, nothing else: {"siteTitle":"","siteDescription":"","items":[{"title":"","link":"","description":"","pubDate":""}]}. Today's date: ${today}.`,
+      system: `You are an RSS feed extraction engine. The page content uses markdown-style links: [title](url). Extract all blog posts, articles, or newsletter entries. For each post extract: title (the link text), link (the EXACT url from the parentheses — do NOT modify, shorten, or reconstruct it), description (brief summary if available), pubDate (ISO 8601 format if found, otherwise empty string). CRITICAL: Use the exact URL as given in the (url) part of each [text](url) link — never guess or derive the URL from the title. Return ONLY valid JSON with no markdown, no explanation, nothing else: {"siteTitle":"","siteDescription":"","items":[{"title":"","link":"","description":"","pubDate":""}]}. Today's date: ${today}.`,
       messages: [
         {
           role: "user",
