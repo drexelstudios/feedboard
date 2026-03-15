@@ -403,9 +403,9 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Column count toggle */}
+          {/* Column count toggle — hidden on mobile, visible md+ */}
           <div
-            className="flex items-center rounded-lg p-0.5 flex-shrink-0"
+            className="hidden md:flex items-center rounded-lg p-0.5 flex-shrink-0"
             style={{ background: "hsl(var(--muted))" }}
           >
             {([2, 3, 4] as Columns[]).map((n) => (
