@@ -49,8 +49,12 @@ type Layout = "grid" | "columns";
 
 export default function Dashboard() {
   const [activeId, setActiveId] = useState<number | null>(null);
-  const [layout, setLayout] = useState<Layout>("grid");
-  const [activeCategory, setActiveCategory] = useState<string>("All");
+  const [layout, setLayout] = useState<Layout>(
+    () => (localStorage.getItem("feedboard:layout") as Layout) || "grid"
+  );
+  const [activeCategory, setActiveCategory] = useState<string>(
+    () => localStorage.getItem("feedboard:activeCategory") || "All"
+  );
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showCreateFeed, setShowCreateFeed] = useState(false);
   const [prefillUrl, setPrefillUrl] = useState<string | undefined>();
@@ -123,6 +127,10 @@ export default function Dashboard() {
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  // Persist active tab + layout to localStorage
+  useEffect(() => { localStorage.setItem("feedboard:activeCategory", activeCategory); }, [activeCategory]);
+  useEffect(() => { localStorage.setItem("feedboard:layout", layout); }, [layout]);
 
   // Focus rename input when it appears
   useEffect(() => {
