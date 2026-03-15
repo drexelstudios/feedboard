@@ -164,6 +164,30 @@ async function upsertFeedItems(
 }
 
 export function registerRoutes(httpServer: Server, app: Express) {
+  // ── Diagnostic: test jsdom/readability in Vercel runtime (no auth) ─────────
+  app.get("/api/extract/ping", async (_req, res) => {
+    const steps: string[] = [];
+    try {
+      steps.push("start");
+      const jsdomMod = require("jsdom");
+      steps.push("jsdom loaded");
+      const { JSDOM } = jsdomMod;
+      const dom = new JSDOM("<html><body><article><p>Hello world test content for readability parsing.</p></article></body></html>", { url: "https://example.com" });
+      steps.push("JSDOM instantiated");
+      const { Readability } = require("@mozilla/readability");
+      steps.push("Readability loaded");
+      const article = new Readability(dom.window.document).parse();
+      steps.push("Readability parsed: " + (article ? article.title || "ok" : "null"));
+      const DOMPurify = require("isomorphic-dompurify").default;
+      steps.push("DOMPurify loaded");
+      const clean = DOMPurify.sanitize("<p>test</p>");
+      steps.push("DOMPurify sanitized: " + clean);
+      res.json({ ok: true, steps });
+    } catch (e: any) {
+      res.json({ ok: false, steps, error: e.message, stack: e.stack?.slice(0, 500) });
+    }
+  });
+
   // ── Seed endpoint (called once after first login) ──────────────────────────
   app.post("/api/auth/seed", requireAuth, async (req, res) => {
     try {
