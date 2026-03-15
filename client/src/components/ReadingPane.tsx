@@ -96,7 +96,7 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
     })
       .then((r) => (r as Response).json())
       .then((data: ExtractResult) => setExtractResult(data))
-      .catch(() => setExtractResult({ fallback: true, error: "Extraction failed" }))
+      .catch((e: any) => setExtractResult({ fallback: true, error: e?.message || "Extraction failed" }))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, item?.itemId, item?.link]);
@@ -304,7 +304,7 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
 
             {/* Fallback */}
             {!loading && extractResult?.fallback && (
-              <FallbackState url={item.link} />
+              <FallbackState url={item.link} error={extractResult.error} />
             )}
 
             {/* Article body
@@ -358,12 +358,17 @@ function ReadingSkeleton() {
   );
 }
 
-function FallbackState({ url }: { url: string }) {
+function FallbackState({ url, error }: { url: string; error?: string }) {
   return (
     <div className="reading-fallback">
       <p className="reading-fallback__message">
         This article couldn't be loaded in reader mode.
       </p>
+      {error && (
+        <p style={{ fontSize: "11px", opacity: 0.5, wordBreak: "break-all", marginTop: "4px" }}>
+          {error}
+        </p>
+      )}
       <a
         href={url}
         target="_blank"
