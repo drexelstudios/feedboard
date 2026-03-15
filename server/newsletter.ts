@@ -47,12 +47,33 @@ function stripHtml(html: string): string {
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")  // remove <script> blocks + contents
     .replace(/<!--[\s\S]*?-->/g, " ")                    // remove HTML comments
     .replace(/<[^>]*>/g, " ")                            // strip remaining tags
+    // Named entities
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&mdash;/gi, "\u2014")
+    .replace(/&ndash;/gi, "\u2013")
+    .replace(/&hellip;/gi, "\u2026")
+    .replace(/&rsquo;/gi, "\u2019")
+    .replace(/&lsquo;/gi, "\u2018")
+    .replace(/&rdquo;/gi, "\u201D")
+    .replace(/&ldquo;/gi, "\u201C")
+    // Numeric entities (decimal: &#8217; and hex: &#x2019;)
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+      const cp = parseInt(hex, 16);
+      // Drop zero-width / invisible control characters
+      if (cp === 0x200C || cp === 0x200B || cp === 0x200D || cp === 0xFEFF) return "";
+      return String.fromCodePoint(cp);
+    })
+    .replace(/&#([0-9]+);/gi, (_, dec) => {
+      const cp = parseInt(dec, 10);
+      // Drop zero-width / invisible control characters
+      if (cp === 8204 || cp === 8203 || cp === 8205 || cp === 65279) return "";
+      return String.fromCodePoint(cp);
+    })
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 300);
