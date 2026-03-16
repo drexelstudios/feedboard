@@ -540,9 +540,34 @@ export function registerRoutes(httpServer: Server, app: Express) {
           FORCE_BODY: true,
         });
 
+        // ── Strip structural/boilerplate borders from table elements ───────────
+        // Many email senders (1440, Morning Brew, etc.) use border="1" HTML
+        // attributes AND inline style="border:..." on nested tables for Outlook
+        // compatibility. Strip both so they don't render as nested boxes.
+        const cleanDom = new JSDOM(`<div>${sanitized}</div>`);
+        const tableEls = cleanDom.window.document.querySelectorAll("table, tr, td, th");
+        tableEls.forEach((el: Element) => {
+          // Remove HTML border attribute
+          el.removeAttribute("border");
+          // Strip border-related properties from inline styles
+          const style = (el as HTMLElement).style;
+          if (style) {
+            style.removeProperty("border");
+            style.removeProperty("border-top");
+            style.removeProperty("border-right");
+            style.removeProperty("border-bottom");
+            style.removeProperty("border-left");
+            style.removeProperty("border-width");
+            style.removeProperty("border-style");
+            style.removeProperty("border-color");
+            style.removeProperty("outline");
+          }
+        });
+        const cleanedHtml = cleanDom.window.document.querySelector("div")?.innerHTML || sanitized;
+
         // Extract thumbnail from first image (for hero display).
         // Skip tracking pixels (width=1, height=1, or common tracking URL patterns).
-        const thumbDom = new JSDOM(`<div>${sanitized}</div>`);
+        const thumbDom = new JSDOM(`<div>${cleanedHtml}</div>`);
         const allImgs = Array.from(thumbDom.window.document.querySelectorAll("img"));
         const heroImageUrl = allImgs
           .map((img) => ({
@@ -566,12 +591,12 @@ export function registerRoutes(httpServer: Server, app: Express) {
         const wordCount = textContent.trim().split(/\s+/).length;
         const readingTimeMinutes = Math.max(1, Math.ceil(wordCount / 200));
 
-        // Persist sanitized HTML back (marks it as extracted so we don't re-run)
+        // Persist cleaned HTML back (marks it as extracted so we don't re-run)
         if (item_id) {
           await supabaseAdmin
             .from("feed_items")
             .update({
-              body_html: sanitized,
+              body_html: cleanedHtml,
               body_extracted_at: new Date().toISOString(),
               reading_time_minutes: readingTimeMinutes,
               updated_at: new Date().toISOString(),
@@ -583,7 +608,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
         return res.json({
           title: "",        // reading pane uses item.title directly
           byline: "",       // reading pane uses item.emailFrom
-          content: sanitized,
+          content: cleanedHtml,
           excerpt: "",
           hero_image_url: heroImageUrl,
           reading_time_minutes: readingTimeMinutes,
