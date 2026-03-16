@@ -304,6 +304,91 @@ export function registerRoutes(httpServer: Server, app: Express) {
       return res.json({ items: cached.items.slice(0, feed.maxItems), cached: true });
     }
 
+    // ── Feed Creator feeds: url contains /api/feed/<slug> ─────────────────
+    // These point to our own RSS endpoint. Fetching them via rss-parser hits
+    // Vercel deployment-protection (401) on preview deployments. Instead,
+    // extract the slug and query scraped_posts directly.
+    const fcSlugMatch = feed.url?.match(/\/api\/feed\/([^/?#]+)/);
+    if (fcSlugMatch) {
+      const slug = fcSlugMatch[1];
+      const { data: scrapedFeed } = await supabaseAdmin
+        .from("scraped_feeds")
+        .select("id, source_url")
+        .eq("feed_slug", slug)
+        .maybeSingle();
+
+      if (scrapedFeed) {
+        const { data: posts } = await supabaseAdmin
+          .from("scraped_posts")
+          .select("*")
+          .eq("feed_id", scrapedFeed.id)
+          .order("pub_date", { ascending: false })
+          .limit(feed.maxItems);
+
+        // If no stored posts yet, run quickExtract live
+        let items = (posts || []).map((p: any) => ({
+          title: p.title,
+          link: p.link,
+          pubDate: p.pub_date || "",
+          summary: p.description || "",
+          author: "",
+          thumbnail: null,
+          guid: p.guid || p.link,
+        }));
+
+        if (!items.length) {
+          try {
+            const pageResp = await fetch(scrapedFeed.source_url, {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; Feedhunt/1.0)" },
+              signal: AbortSignal.timeout(8000),
+              redirect: "follow",
+            });
+            if (pageResp.ok) {
+              const reader = pageResp.body?.getReader();
+              const chunks: Uint8Array[] = [];
+              let totalBytes = 0;
+              if (reader) {
+                while (true) {
+                  const { done, value } = await reader.read();
+                  if (done || !value) break;
+                  chunks.push(value);
+                  totalBytes += value.byteLength;
+                  if (totalBytes >= 200 * 1024) { reader.cancel(); break; }
+                }
+              }
+              const html = new TextDecoder().decode(
+                chunks.reduce((acc, c) => { const t = new Uint8Array(acc.byteLength + c.byteLength); t.set(acc); t.set(c, acc.byteLength); return t; }, new Uint8Array(0))
+              );
+              const extracted = quickExtract(html, scrapedFeed.source_url);
+              items = extracted.map((e) => ({
+                title: e.title, link: e.link,
+                pubDate: e.pubDate || "", summary: e.description || "",
+                author: "", thumbnail: null, guid: e.link,
+              }));
+              // Persist so next load is instant
+              if (items.length) {
+                const toUpsert = items.map((item) => ({
+                  feed_id: scrapedFeed.id,
+                  title: item.title, link: item.link,
+                  description: item.summary,
+                  pub_date: item.pubDate ? new Date(item.pubDate).toISOString() : null,
+                  guid: item.guid,
+                }));
+                supabaseAdmin.from("scraped_posts")
+                  .upsert(toUpsert, { onConflict: "feed_id,guid", ignoreDuplicates: true })
+                  .then(() => {})
+                  .catch(() => {});
+              }
+            }
+          } catch { /* fall through to empty */ }
+        }
+
+        feedCache.set(id, { items, fetchedAt: Date.now() });
+        upsertFeedItems(id, req.userId!, items).catch(() => {});
+        return res.json({ items: items.slice(0, feed.maxItems), cached: false });
+      }
+    }
+
     const rawItems = await fetchFeedItems(feed.url);
     // Upsert to feed_items for stable IDs and reading pane support
     // Fire-and-forget so we don't block the response
