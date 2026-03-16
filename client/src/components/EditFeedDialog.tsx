@@ -85,18 +85,18 @@ export default function EditFeedDialog({ open, onOpenChange, feed }: EditFeedDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" data-testid={`dialog-edit-feed-${feed.id}`}>
+      <DialogContent className="max-w-md overflow-hidden" data-testid={`dialog-edit-feed-${feed.id}`}>
         <DialogHeader>
           <DialogTitle style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}>
             Edit Feed
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 pt-1">
+        <div className="space-y-4 pt-1 min-w-0">
           <div className="space-y-1.5">
             <Label>Feed URL</Label>
             <p
-              className="text-xs truncate py-1.5 px-2 rounded"
+              className="text-xs py-1.5 px-2 rounded w-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap block"
               style={{
                 background: "hsl(var(--muted))",
                 color: "hsl(var(--muted-foreground))",
@@ -148,12 +148,12 @@ export default function EditFeedDialog({ open, onOpenChange, feed }: EditFeedDia
           </div>
 
           <div className="flex flex-col gap-2 pt-1">
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full">
               <Button
                 data-testid="button-save-feed"
                 onClick={() => saveMutation.mutate()}
                 disabled={!title.trim() || saveMutation.isPending}
-                className="flex-1"
+                className="flex-1 min-w-0"
               >
                 {saveMutation.isPending ? (
                   <><Loader2 size={14} className="animate-spin mr-2" /> Saving…</>
@@ -161,7 +161,7 @@ export default function EditFeedDialog({ open, onOpenChange, feed }: EditFeedDia
                   "Save changes"
                 )}
               </Button>
-              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button variant="ghost" className="shrink-0" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
             </div>
