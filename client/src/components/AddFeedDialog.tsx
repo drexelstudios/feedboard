@@ -216,11 +216,11 @@ export default function AddFeedDialog({ open, onOpenChange, categories, initialU
           </div>
 
           {/* Category + Max items */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-3">
+            <div className="space-y-1.5 flex-1 min-w-[120px]">
               <Label>Category</Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger data-testid="select-category">
+                <SelectTrigger data-testid="select-category" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -230,10 +230,10 @@ export default function AddFeedDialog({ open, onOpenChange, categories, initialU
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 w-[100px] shrink-0">
               <Label htmlFor="max-items">Max items</Label>
               <Select value={String(maxItems)} onValueChange={(v) => setMaxItems(Number(v))}>
-                <SelectTrigger data-testid="select-max-items">
+                <SelectTrigger data-testid="select-max-items" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -251,7 +251,7 @@ export default function AddFeedDialog({ open, onOpenChange, categories, initialU
               data-testid="button-add-feed-submit"
               onClick={() => addMutation.mutate()}
               disabled={!url.trim() || !title.trim() || addMutation.isPending}
-              className="flex-1"
+              className="flex-1 min-w-0"
             >
               {addMutation.isPending ? (
                 <><Loader2 size={14} className="animate-spin mr-2" /> Adding…</>
@@ -259,7 +259,7 @@ export default function AddFeedDialog({ open, onOpenChange, categories, initialU
                 "Add Feed"
               )}
             </Button>
-            <Button variant="ghost" onClick={handleClose}>
+            <Button variant="ghost" onClick={handleClose} className="shrink-0">
               Cancel
             </Button>
           </div>
