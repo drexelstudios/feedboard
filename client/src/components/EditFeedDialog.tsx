@@ -59,7 +59,7 @@ export default function EditFeedDialog({ open, onOpenChange, feed }: EditFeedDia
 
   const rescanMutation = useMutation({
     mutationFn: () =>
-      apiRequest("POST", "/api/scrape/rescan", { slug: feedCreatorSlug }),
+      apiRequest("POST", "/api/scrape/rescan", { slug: feedCreatorSlug, feedId: feed.id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/feeds"] });
       queryClient.invalidateQueries({ queryKey: [`/api/feeds/${feed.id}/items`] });
