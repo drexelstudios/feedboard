@@ -4,7 +4,17 @@ import { supabase } from "@/lib/supabaseClient";
 // Empty base — API calls use relative paths (works on Vercel and local dev)
 export const API_BASE = "";
 
+// When VITE_DEV_BYPASS_AUTH=true, send a special header instead of a Bearer token.
+// The backend requireAuth middleware recognises this header and injects the dev user.
+const DEV_BYPASS = import.meta.env.VITE_DEV_BYPASS_AUTH === "true";
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (DEV_BYPASS) {
+    return {
+      "Content-Type": "application/json",
+      "X-Dev-Bypass-Auth": "true",
+    };
+  }
   const { data: { session } } = await supabase.auth.getSession();
   if (session?.access_token) {
     return {
