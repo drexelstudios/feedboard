@@ -322,14 +322,15 @@ export function registerRoutes(httpServer: Server, app: Express) {
           .from("scraped_posts")
           .select("*")
           .eq("feed_id", scrapedFeed.id)
-          .order("pub_date", { ascending: false })
+          .order("pub_date", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false })
           .limit(feed.maxItems);
 
         // If no stored posts yet, run quickExtract live
         let items = (posts || []).map((p: any) => ({
           title: p.title,
           link: p.link,
-          pubDate: p.pub_date || "",
+          pubDate: p.pub_date || p.created_at || "",
           summary: p.description || "",
           author: "",
           thumbnail: null,
