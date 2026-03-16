@@ -572,19 +572,59 @@ export function registerRoutes(httpServer: Server, app: Express) {
             // structural elements. Email spacer rows/cells use height="20",
             // style="height:20px", font-size:20px (invisible spacer trick),
             // and padding:30px to force vertical gaps.
+            // Also applies to div — email layout often uses <div style="padding:30px">
             const tag = el.tagName.toLowerCase();
-            if (["table", "tr", "td", "th"].includes(tag)) {
+            if (["table", "tr", "td", "th", "div"].includes(tag)) {
               el.removeAttribute("height");
               style.removeProperty("height");
               style.removeProperty("min-height");
               style.removeProperty("line-height");
               style.removeProperty("font-size"); // invisible spacer font trick
-              // Cap vertical padding to 4px max — email cells use padding:20-40px
-              // as spacing which creates huge gaps in our narrow reading pane.
-              const pt = parseFloat(style.getPropertyValue("padding-top") || style.getPropertyValue("padding") || "0");
-              const pb = parseFloat(style.getPropertyValue("padding-bottom") || style.getPropertyValue("padding") || "0");
-              if (pt > 4) style.setProperty("padding-top", "4px");
-              if (pb > 4) style.setProperty("padding-bottom", "4px");
+              // Remove excessive top/bottom margins too (emails use margin:20px+ on divs)
+              const mt = parseFloat(style.getPropertyValue("margin-top") || "0");
+              const mb = parseFloat(style.getPropertyValue("margin-bottom") || "0");
+              if (mt > 8) style.setProperty("margin-top", "0px");
+              if (mb > 8) style.setProperty("margin-bottom", "0px");
+              // Cap vertical padding to 4px max.
+              // IMPORTANT: JSDOM does NOT auto-expand the padding shorthand into
+              // padding-top/padding-bottom sub-properties. So we must:
+              //   1. Read the shorthand to detect the value
+              //   2. Clear the shorthand (otherwise it overrides our individual props)
+              //   3. Set explicit padding-top / padding-bottom
+              //   4. Preserve horizontal padding (left/right) from shorthand
+              const paddingShorthand = style.getPropertyValue("padding");
+              const paddingTop = style.getPropertyValue("padding-top");
+              const paddingBottom = style.getPropertyValue("padding-bottom");
+              const paddingLeft = style.getPropertyValue("padding-left");
+              const paddingRight = style.getPropertyValue("padding-right");
+
+              // Parse shorthand — may be "20px", "10px 20px", "10px 20px 30px 20px"
+              let shortVert = 0;
+              let shortHorizL = 0;
+              let shortHorizR = 0;
+              if (paddingShorthand) {
+                const parts = paddingShorthand.trim().split(/\s+/).map(parseFloat);
+                if (parts.length === 1) { shortVert = parts[0]; shortHorizL = shortHorizR = parts[0]; }
+                else if (parts.length === 2) { shortVert = parts[0]; shortHorizL = shortHorizR = parts[1]; }
+                else if (parts.length === 3) { shortVert = parts[0]; shortHorizL = shortHorizR = parts[1]; }
+                else if (parts.length >= 4) { shortVert = parts[0]; shortHorizR = parts[1]; shortHorizL = parts[3]; }
+              }
+
+              // Effective vertical padding values (individual props override shorthand in CSS)
+              const pt = paddingTop ? parseFloat(paddingTop) : shortVert;
+              const pb = paddingBottom ? parseFloat(paddingBottom) : shortVert;
+
+              if (pt > 4 || pb > 4) {
+                // Clear shorthand first — otherwise it will keep overriding our individual props
+                style.removeProperty("padding");
+                // Restore horizontal padding (from shorthand or explicit props)
+                const pl = paddingLeft ? paddingLeft : (shortHorizL ? `${shortHorizL}px` : "0");
+                const pr = paddingRight ? paddingRight : (shortHorizR ? `${shortHorizR}px` : "0");
+                style.setProperty("padding-top", pt > 4 ? "4px" : `${pt}px`);
+                style.setProperty("padding-bottom", pb > 4 ? "4px" : `${pb}px`);
+                style.setProperty("padding-left", pl);
+                style.setProperty("padding-right", pr);
+              }
             }
           }
         });
