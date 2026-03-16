@@ -602,6 +602,7 @@ export default function Dashboard() {
         open={showAddFeed}
         onOpenChange={(open) => { setShowAddFeed(open); if (!open) setPrefillUrl(undefined); }}
         categories={categoryNames}
+        initialUrl={prefillUrl}
       />
 
       <FeedCreatorDialog
