@@ -94,31 +94,46 @@ export async function extractWithClaude(
 
   const today = new Date().toISOString().split("T")[0];
 
-  // Trim input — 15k chars is plenty for finding article links on a homepage.
-  // Keeps Claude latency well within Vercel's 30s function limit.
-  const truncatedHtml = cleanedHtml.slice(0, 15000);
+  // Trim input — 10k chars is plenty for finding article links on a homepage.
+  // Smaller payload = faster response, fewer output tokens, lower rate-limit risk.
+  const truncatedHtml = cleanedHtml.slice(0, 10000);
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    // 20s timeout — page fetch takes up to 15s, leaving 15s buffer before Vercel's 30s limit
-    signal: AbortSignal.timeout(20000),
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2048,
-      system: `You are an RSS feed extraction engine. The page content uses markdown-style links: [title](url). Extract all blog posts, articles, or newsletter entries. For each post extract: title (the link text), link (the EXACT url from the parentheses — do NOT modify, shorten, or reconstruct it), description (brief summary if available), pubDate (ISO 8601 format if found, otherwise empty string). CRITICAL: Use the exact URL as given in the (url) part of each [text](url) link — never guess or derive the URL from the title. Return ONLY valid JSON with no markdown, no explanation, nothing else: {"siteTitle":"","siteDescription":"","items":[{"title":"","link":"","description":"","pubDate":""}]}. Today's date: ${today}.`,
-      messages: [
-        {
-          role: "user",
-          content: `Base URL: ${sourceUrl}\n\nPage content:\n${truncatedHtml}`,
-        },
-      ],
-    }),
+  const CLAUDE_BODY = JSON.stringify({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 800,
+    system: `You are an RSS feed extraction engine. The page content uses markdown-style links: [title](url). Extract all blog posts, articles, or newsletter entries. For each post extract: title (the link text), link (the EXACT url from the parentheses — do NOT modify, shorten, or reconstruct it), description (brief summary if available), pubDate (ISO 8601 format if found, otherwise empty string). CRITICAL: Use the exact URL as given in the (url) part of each [text](url) link — never guess or derive the URL from the title. Return ONLY valid JSON with no markdown, no explanation, nothing else: {"siteTitle":"","siteDescription":"","items":[{"title":"","link":"","description":"","pubDate":""}]}. Today's date: ${today}.`,
+    messages: [
+      {
+        role: "user",
+        content: `Base URL: ${sourceUrl}\n\nPage content:\n${truncatedHtml}`,
+      },
+    ],
   });
+
+  const CLAUDE_HEADERS = {
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json",
+  };
+
+  // Call Claude — retry once on 429 rate-limit after a short back-off
+  let response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: CLAUDE_HEADERS,
+    signal: AbortSignal.timeout(15000),
+    body: CLAUDE_BODY,
+  });
+
+  if (response.status === 429) {
+    // Back off 5 seconds then retry once
+    await new Promise((r) => setTimeout(r, 5000));
+    response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: CLAUDE_HEADERS,
+      signal: AbortSignal.timeout(15000),
+      body: CLAUDE_BODY,
+    });
+  }
 
   if (!response.ok) {
     const err = await response.text();
@@ -181,12 +196,29 @@ export async function scrapeFeed(
         "User-Agent": "Mozilla/5.0 (compatible; Feedhunt/1.0; +https://feedhunt.app)",
         "Accept": "text/html,application/xhtml+xml,*/*",
       },
-      signal: AbortSignal.timeout(15000),
+      // 8s to receive headers — leaves enough budget for Claude within Vercel's 30s limit
+      signal: AbortSignal.timeout(8000),
       redirect: "follow",
     });
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const html = await resp.text();
+    // Stream only the first 200 KB — large sites send megabytes we never need
+    const reader = resp.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    const MAX_BYTES = 200 * 1024; // 200 KB
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done || !value) break;
+        chunks.push(value);
+        totalBytes += value.byteLength;
+        if (totalBytes >= MAX_BYTES) { reader.cancel(); break; }
+      }
+    }
+    const html = new TextDecoder().decode(
+      chunks.reduce((acc, c) => { const t = new Uint8Array(acc.byteLength + c.byteLength); t.set(acc); t.set(c, acc.byteLength); return t; }, new Uint8Array(0))
+    );
     const cleaned = cleanHtml(html, sourceUrl);
 
     // Extract with Claude
