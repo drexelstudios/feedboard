@@ -119,6 +119,18 @@ declare global {
 }
 
 async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  // ── Dev auth bypass ────────────────────────────────────────────────────────
+  // When DEV_BYPASS_AUTH=true (Preview env only) and the request carries the
+  // special header set by queryClient.ts, skip Supabase and inject the dev user.
+  if (
+    process.env.DEV_BYPASS_AUTH === "true" &&
+    req.headers["x-dev-bypass-auth"] === "true"
+  ) {
+    req.userId = "88b0c21d-1be1-4ab4-bb85-ae6915f57f4e";
+    req.userEmail = "rafael@drexelstudios.com";
+    return next();
+  }
+  // ── Normal Supabase auth ───────────────────────────────────────────────────
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Unauthorized" });
