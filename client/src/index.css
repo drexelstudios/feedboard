@@ -505,8 +505,12 @@ body {
 /* ── Scrollable area ───────────────────────────────────────────────────────── */
 .reading-pane__scroll { flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
 .reading-pane__inner { max-width: 680px; margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8); }
+/* Newsletters render their body OUTSIDE __inner, so remove the bottom padding
+   that would otherwise create a visible gap between the meta section and the email HTML. */
+.reading-pane__inner--newsletter { padding-bottom: var(--space-3) !important; }
 @media (max-width: 767px) {
   .reading-pane__inner { max-width: none; padding: var(--space-5) var(--space-5) 80px; }
+  .reading-pane__inner--newsletter { padding-bottom: var(--space-2) !important; }
 }
 
 /* ── Article typography ────────────────────────────────────────────────────── */
@@ -550,16 +554,20 @@ body {
 }
 /* Collapse fixed heights and vertical padding that email spacer rows use for gaps.
    Emails use height="30", style="height:30px", font-size:30px, and padding:30px
-   as spacing mechanisms. Override all of them. */
+   as spacing mechanisms. Override all of them.
+   Also target div — many newsletters (Morning Brew, 1440) use <div style="padding:30px"> */
 .reading-pane__body--newsletter tr,
 .reading-pane__body--newsletter td,
-.reading-pane__body--newsletter th {
+.reading-pane__body--newsletter th,
+.reading-pane__body--newsletter div {
   height: auto !important;
   min-height: 0 !important;
   line-height: normal !important;
   font-size: inherit !important;
   padding-top: 4px !important;
   padding-bottom: 4px !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
 }
 /* Hide tiny spacer/tracking images (width or height ≤ 4px) */
 .reading-pane__body--newsletter img[width="1"],
