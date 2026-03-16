@@ -567,13 +567,13 @@ body {
   padding-top: 4px !important;
   padding-bottom: 4px !important;
 }
-/* For div: collapse height and cap padding, but leave font-size and margins alone —
-   email divs use font-size for actual text, and margins for intentional section spacing. */
+/* For div: only collapse fixed heights — do NOT override padding or margins.
+   Unlike table cells, email divs often have zero padding that we'd incorrectly inflate,
+   and they use margins for intentional section spacing we want to preserve.
+   Padding capping for divs is handled by JSDOM server-side only. */
 .reading-pane__body--newsletter div {
   height: auto !important;
   min-height: 0 !important;
-  padding-top: 4px !important;
-  padding-bottom: 4px !important;
 }
 /* Hide tiny spacer/tracking images (width or height ≤ 4px) */
 .reading-pane__body--newsletter img[width="1"],
