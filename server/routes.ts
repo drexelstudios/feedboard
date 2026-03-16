@@ -568,15 +568,23 @@ export function registerRoutes(httpServer: Server, app: Express) {
             style.removeProperty("border-color");
             style.removeProperty("border-radius");
             style.removeProperty("outline");
-            // Also strip explicit height from structural elements —
-            // email spacer rows use height="20" / style="height:20px" to add
-            // vertical gaps that look excessive once backgrounds are removed.
+            // Strip explicit heights and excessive vertical padding from
+            // structural elements. Email spacer rows/cells use height="20",
+            // style="height:20px", font-size:20px (invisible spacer trick),
+            // and padding:30px to force vertical gaps.
             const tag = el.tagName.toLowerCase();
             if (["table", "tr", "td", "th"].includes(tag)) {
               el.removeAttribute("height");
               style.removeProperty("height");
+              style.removeProperty("min-height");
               style.removeProperty("line-height");
-              style.removeProperty("font-size"); // tiny invisible spacer fonts
+              style.removeProperty("font-size"); // invisible spacer font trick
+              // Cap vertical padding to 4px max — email cells use padding:20-40px
+              // as spacing which creates huge gaps in our narrow reading pane.
+              const pt = parseFloat(style.getPropertyValue("padding-top") || style.getPropertyValue("padding") || "0");
+              const pb = parseFloat(style.getPropertyValue("padding-bottom") || style.getPropertyValue("padding") || "0");
+              if (pt > 4) style.setProperty("padding-top", "4px");
+              if (pb > 4) style.setProperty("padding-bottom", "4px");
             }
           }
         });
