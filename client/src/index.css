@@ -548,21 +548,24 @@ body {
   background-color: transparent !important;
   background-image: none !important;
 }
-/* Collapse email spacer rows: override fixed heights on table structural elements.
-   Spacer rows use height="30" or style="height:30px" to force vertical gaps —
-   capping at max-height:0 with overflow:hidden collapses them to nothing. */
-.reading-pane__body--newsletter tr {
-  height: auto !important;
-  max-height: none !important;
-  line-height: normal !important;
-}
+/* Collapse fixed heights that email spacer rows use for vertical gaps */
+.reading-pane__body--newsletter tr,
 .reading-pane__body--newsletter td,
 .reading-pane__body--newsletter th {
   height: auto !important;
+  min-height: 0 !important;
+  line-height: normal !important;
+  font-size: inherit !important;
 }
-/* Hide 1px spacer/tracking images entirely */
+/* Hide tiny spacer/tracking images (width or height ≤ 4px) */
 .reading-pane__body--newsletter img[width="1"],
-.reading-pane__body--newsletter img[height="1"] {
+.reading-pane__body--newsletter img[width="2"],
+.reading-pane__body--newsletter img[width="3"],
+.reading-pane__body--newsletter img[width="4"],
+.reading-pane__body--newsletter img[height="1"],
+.reading-pane__body--newsletter img[height="2"],
+.reading-pane__body--newsletter img[height="3"],
+.reading-pane__body--newsletter img[height="4"] {
   display: none !important;
 }
 /* Re-allow coloured backgrounds on text content elements (callout boxes etc) */
