@@ -534,12 +534,36 @@ body {
   margin-left: 0 !important;
   margin-right: 0 !important;
 }
-/* Strip HTML-attribute borders on tables (Outlook-compat boilerplate like border="1").
-   These appear as nested box outlines in senders like 1440. CSS-defined borders are unaffected. */
-.reading-pane__body--newsletter table[border],
-.reading-pane__body--newsletter td[border] {
-  border: 0 !important;
+/* Neutralise ALL borders — attribute-based and inline-style-based.
+   Email senders (1440, Morning Brew) use border="1", border-color, outline,
+   and bgcolor-contrast tricks to fake nested boxes for Outlook compat. */
+.reading-pane__body--newsletter table,
+.reading-pane__body--newsletter tr,
+.reading-pane__body--newsletter td,
+.reading-pane__body--newsletter th,
+.reading-pane__body--newsletter div,
+.reading-pane__body--newsletter span {
+  border: none !important;
+  border-color: transparent !important;
   outline: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+/* Re-allow background on img wrappers that need colour (e.g. logo bg) — keep
+   visible coloured backgrounds on <p> and heading elements for callouts */
+.reading-pane__body--newsletter p,
+.reading-pane__body--newsletter h1,
+.reading-pane__body--newsletter h2,
+.reading-pane__body--newsletter h3,
+.reading-pane__body--newsletter h4,
+.reading-pane__body--newsletter h5,
+.reading-pane__body--newsletter h6,
+.reading-pane__body--newsletter a,
+.reading-pane__body--newsletter strong,
+.reading-pane__body--newsletter em,
+.reading-pane__body--newsletter li {
+  background-color: revert;
+  background-image: revert;
 }
 /* Also strip common email-boilerplate spacing attributes via CSS */
 .reading-pane__body--newsletter table[cellpadding],
