@@ -111,10 +111,10 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
             onClick={onCreateFeed}
             size="sm"
             variant="outline"
-            className="gap-1.5 h-8 text-xs font-semibold hidden sm:flex"
+            className="gap-1.5 h-8 text-xs font-semibold flex"
           >
             <Sparkles size={13} />
-            Create Feed
+            <span className="hidden sm:inline">Create Feed</span>
           </Button>
 
           <Button

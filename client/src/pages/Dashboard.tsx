@@ -39,10 +39,12 @@ import type { EnrichedFeedItem } from "@/components/FeedWidget";
 import ReadingPane from "@/components/ReadingPane";
 import AddFeedDialog from "@/components/AddFeedDialog";
 import FeedCreatorDialog from "@/components/FeedCreatorDialog";
+import NewsletterManager from "@/components/NewsletterManager";
+import RSSManager from "@/components/RSSManager";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, MoreHorizontal, Pencil, Trash2, Check, X } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, Check, X, Mail, Rss } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -59,6 +61,7 @@ export default function Dashboard() {
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showCreateFeed, setShowCreateFeed] = useState(false);
   const [prefillUrl, setPrefillUrl] = useState<string | undefined>();
+  const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
   // Inline rename state
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -72,6 +75,10 @@ export default function Dashboard() {
   // Reading pane state (Phase 6)
   const [selectedItem, setSelectedItem] = useState<EnrichedFeedItem | null>(null);
   const [isPaneOpen, setIsPaneOpen] = useState(false);
+  // Newsletter manager dialog
+  const [showNewsletterManager, setShowNewsletterManager] = useState(false);
+  // RSS manager dialog
+  const [showRssManager, setShowRssManager] = useState(false);
 
   const { toast } = useToast();
 
@@ -203,10 +210,18 @@ export default function Dashboard() {
   const categoryNames = categories.map((c) => c.name);
   const allTabs = ["All", ...categoryNames];
 
-  const filteredFeeds =
-    activeCategory === "All"
-      ? feeds
-      : feeds.filter((f) => f.category === activeCategory);
+  // System tabs — derived client-side from feed source_type
+  // "RSS" tab: shown only when at least one rss feed exists
+  // "Newsletters" tab: shown only when at least one newsletter feed exists
+  const hasRssFeeds = useMemo(() => feeds.some((f) => (f as any).source_type !== "newsletter"), [feeds]);
+  const hasNewsletterFeeds = useMemo(() => feeds.some((f) => (f as any).source_type === "newsletter"), [feeds]);
+
+  const filteredFeeds = useMemo(() => {
+    if (activeCategory === "All") return feeds;
+    if (activeCategory === "__rss__") return feeds.filter((f) => (f as any).source_type !== "newsletter");
+    if (activeCategory === "__newsletters__") return feeds.filter((f) => (f as any).source_type === "newsletter");
+    return feeds.filter((f) => f.category === activeCategory);
+  }, [feeds, activeCategory]);
 
   const activeItem = activeId ? feeds.find((f) => f.id === activeId) : null;
 
@@ -401,6 +416,79 @@ export default function Dashboard() {
                 New tab
               </button>
             )}
+
+            {/* System tabs — separator + conditional tabs derived from feed data */}
+            {(hasRssFeeds || hasNewsletterFeeds) && (
+              <div
+                className="mx-1 self-stretch"
+                style={{ width: 1, background: "hsl(var(--border))" }}
+                aria-hidden
+              />
+            )}
+
+            {/* RSS system tab — shown when RSS feeds exist */}
+            {hasRssFeeds && (
+              <div className="flex items-center">
+                <button
+                  key="__rss__"
+                  data-testid="tab-rss"
+                  onClick={() => setShowRssManager(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all text-muted-foreground hover:text-foreground hover:bg-accent"
+                >
+                  <Rss size={10} aria-hidden />
+                  RSS
+                </button>
+              </div>
+            )}
+
+            {/* Newsletters system tab — shown when newsletter feeds exist */}
+            {hasNewsletterFeeds && (
+              <div className="flex items-center">
+                <button
+                  key="__newsletters__"
+                  data-testid="tab-newsletters"
+                  onClick={() => setActiveCategory("__newsletters__")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
+                    activeCategory === "__newsletters__"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  )}
+                  style={
+                    activeCategory === "__newsletters__"
+                      ? { background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))" }
+                      : {}
+                  }
+                >
+                  <Mail size={10} aria-hidden />
+                  Newsletters
+                </button>
+                {/* Gear icon to open newsletter manager */}
+                <button
+                  data-testid="button-newsletter-manager"
+                  onClick={() => setShowNewsletterManager(true)}
+                  className="ml-0.5 p-1 rounded transition-colors hover:bg-accent"
+                  style={{ color: "hsl(var(--muted-foreground))" }}
+                  title="Manage newsletters"
+                >
+                  <Plus size={11} />
+                </button>
+              </div>
+            )}
+
+            {/* Manage newsletters button — shown even when no newsletter feeds exist */}
+            {!hasNewsletterFeeds && (
+              <button
+                data-testid="button-newsletter-manager-empty"
+                onClick={() => setShowNewsletterManager(true)}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-full text-xs whitespace-nowrap transition-all"
+                style={{ color: "hsl(var(--muted-foreground))" }}
+                title="Set up newsletters"
+              >
+                <Mail size={11} />
+                Newsletters
+              </button>
+            )}
           </div>
 
           {/* Column count toggle — hidden on mobile, visible md+ */}
@@ -509,19 +597,31 @@ export default function Dashboard() {
 
       <AddFeedDialog
         open={showAddFeed}
-        onOpenChange={(open) => { setShowAddFeed(open); if (!open) setPrefillUrl(undefined); }}
+        onOpenChange={(open) => { setShowAddFeed(open); if (!open) { setPrefillUrl(undefined); setPrefillTitle(undefined); } }}
         categories={categoryNames}
+        initialUrl={prefillUrl}
+        initialTitle={prefillTitle}
       />
 
       <FeedCreatorDialog
         open={showCreateFeed}
         onOpenChange={setShowCreateFeed}
         onFeedCreated={(feedUrl, title) => {
-          // Pre-open Add Feed dialog with the generated URL pre-filled
           setShowCreateFeed(false);
           setPrefillUrl(feedUrl);
+          setPrefillTitle(title);
           setShowAddFeed(true);
         }}
+      />
+
+      <NewsletterManager
+        open={showNewsletterManager}
+        onOpenChange={setShowNewsletterManager}
+      />
+
+      <RSSManager
+        open={showRssManager}
+        onOpenChange={setShowRssManager}
       />
 
       {/* Delete category confirmation */}
