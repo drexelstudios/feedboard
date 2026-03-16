@@ -60,6 +60,7 @@ export default function Dashboard() {
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showCreateFeed, setShowCreateFeed] = useState(false);
   const [prefillUrl, setPrefillUrl] = useState<string | undefined>();
+  const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
   // Inline rename state
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -600,18 +601,19 @@ export default function Dashboard() {
 
       <AddFeedDialog
         open={showAddFeed}
-        onOpenChange={(open) => { setShowAddFeed(open); if (!open) setPrefillUrl(undefined); }}
+        onOpenChange={(open) => { setShowAddFeed(open); if (!open) { setPrefillUrl(undefined); setPrefillTitle(undefined); } }}
         categories={categoryNames}
         initialUrl={prefillUrl}
+        initialTitle={prefillTitle}
       />
 
       <FeedCreatorDialog
         open={showCreateFeed}
         onOpenChange={setShowCreateFeed}
         onFeedCreated={(feedUrl, title) => {
-          // Pre-open Add Feed dialog with the generated URL pre-filled
           setShowCreateFeed(false);
           setPrefillUrl(feedUrl);
+          setPrefillTitle(title);
           setShowAddFeed(true);
         }}
       />
