@@ -100,8 +100,8 @@ export async function extractWithClaude(
 
   const CLAUDE_BODY = JSON.stringify({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 800,
-    system: `You are an RSS feed extraction engine. The page content uses markdown-style links: [title](url). Extract all blog posts, articles, or newsletter entries. For each post extract: title (the link text), link (the EXACT url from the parentheses — do NOT modify, shorten, or reconstruct it), description (brief summary if available), pubDate (ISO 8601 format if found, otherwise empty string). CRITICAL: Use the exact URL as given in the (url) part of each [text](url) link — never guess or derive the URL from the title. Return ONLY valid JSON with no markdown, no explanation, nothing else: {"siteTitle":"","siteDescription":"","items":[{"title":"","link":"","description":"","pubDate":""}]}. Today's date: ${today}.`,
+    max_tokens: 2048,
+    system: `You are an RSS feed extraction engine. The page content uses markdown-style links: [title](url). Extract all blog posts, articles, or newsletter entries. For each post extract: title (the link text), link (the EXACT url from the parentheses — do NOT modify, shorten, or reconstruct it), description (one sentence max, empty string if none), pubDate (ISO 8601 format if found, otherwise empty string). CRITICAL: Use the exact URL as given in the (url) part of each [text](url) link — never guess or derive the URL from the title. Keep siteTitle and siteDescription very short (one line each). Return ONLY valid JSON with no markdown, no explanation, nothing else: {"siteTitle":"","siteDescription":"","items":[{"title":"","link":"","description":"","pubDate":""}]}. Today's date: ${today}.`,
     messages: [
       {
         role: "user",
