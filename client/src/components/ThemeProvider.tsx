@@ -612,5 +612,3 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export function useTheme() {
   return useContext(ThemeCtx);
 }
-
-SHA: e6ae22df2d8cfddbcfc0d487a31626d4def4e28e
