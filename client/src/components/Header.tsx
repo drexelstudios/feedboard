@@ -124,7 +124,7 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
               onClick={onCreateFeed}
               size="sm"
               variant="outline"
-              className="gap-1.5 h-8 text-xs font-semibold flex" style={{ paddingLeft: "var(--btn-padding-x-sm)", paddingRight: "var(--btn-padding-x-sm)" }}
+              className="gap-1.5 text-xs font-semibold flex"
             >
               <Sparkles size={13} />
               <span className="hidden sm:inline">Create Feed</span>
@@ -134,7 +134,7 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
               data-testid="button-add-feed"
               onClick={onAddFeed}
               size="sm"
-              className="gap-1.5 h-8 text-xs font-semibold" style={{ paddingLeft: "var(--btn-padding-x-sm)", paddingRight: "var(--btn-padding-x-sm)" }}
+              className="gap-1.5 text-xs font-semibold"
             >
               <Plus size={14} />
               Add Feed
@@ -145,7 +145,7 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
               <DropdownMenuTrigger asChild>
                 <button
                   data-testid="button-user-menu"
-                  className="flex items-center justify-center rounded-full text-xs font-bold transition-all hover:opacity-80" style={{ width: "var(--btn-height-sm, 34px)", height: "var(--btn-height-sm, 34px)", minWidth: "var(--btn-height-sm, 34px)", flexShrink: 0 }}
+                  className="flex items-center justify-center rounded-full font-bold transition-all hover:opacity-80 flex-shrink-0" style={{ width: "var(--btn-height-sm, 34px)", height: "var(--btn-height-sm, 34px)", minWidth: "var(--btn-height-sm, 34px)", fontSize: "calc(var(--text-xs) * 1.1)" }}
                   style={{
                     background: "hsl(var(--primary))",
                     color: "hsl(var(--primary-foreground))",
