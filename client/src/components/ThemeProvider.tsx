@@ -187,10 +187,10 @@ export const THEMES: ThemeDef[] = [
       "--radius-lg":               "0.5rem",
       "--radius-xl":               "0.75rem",
       // Button — taller, more air, medium-weight label (Inter style)
-      "--btn-height":              "40px",
-      "--btn-height-sm":           "32px",
+      "--btn-height":              "42px",
+      "--btn-height-sm":           "36px",
       "--btn-padding-x":           "1.125rem",
-      "--btn-padding-x-sm":        "0.875rem",
+      "--btn-padding-x-sm":        "1rem",
       "--btn-font-weight":         "500",
       "--btn-letter-spacing":      "0em",
       "--btn-font-size":           "0.875rem",
