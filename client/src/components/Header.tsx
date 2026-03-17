@@ -40,8 +40,8 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
 
   // Get initials from email for avatar
   const initials = user?.email
-    ? user.email.slice(0, 2).toUpperCase()
-    : "??";
+    ? user.email.slice(0, 1).toUpperCase()
+    : "?";
 
   return (
     <>
