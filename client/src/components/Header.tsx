@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sun, Moon, Plus, RefreshCw, LogOut, Sparkles, Settings } from "lucide-react";
+import { Plus, RefreshCw, LogOut, Sparkles, Settings } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import type { Feed } from "@shared/schema";
@@ -21,7 +20,6 @@ interface HeaderProps {
 }
 
 export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
-  const { theme, toggle } = useTheme();
   const { user, signOut } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -99,15 +97,6 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
               />
             </button>
 
-            <button
-              data-testid="button-theme-toggle"
-              onClick={toggle}
-              className="p-2 rounded-lg transition-all"
-              style={{ color: "hsl(var(--muted-foreground))" }}
-              title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            >
-              {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
 
             <button
               data-testid="button-settings"
