@@ -415,7 +415,7 @@ body {
   top: 57px;
   right: 0;
   bottom: 0;
-  width: 480px;
+  width: var(--reading-pane-width, 480px);
   background: hsl(var(--card));
   border-left: 1px solid hsl(var(--border));
   display: flex;
@@ -430,7 +430,8 @@ body {
   box-shadow: var(--shadow-lg);
 }
 @media (max-width: 1024px) and (min-width: 768px) {
-  .reading-pane { width: 420px; }
+  /* On tablet, cap to a max of 420px so it never overwhelms the layout */
+  .reading-pane { width: min(var(--reading-pane-width, 420px), 420px); }
 }
 @media (max-width: 767px) {
   .reading-pane { width: 100dvw; top: 0; border-left: none; }
@@ -608,6 +609,50 @@ body {
   transition: opacity 200ms ease, transform 200ms ease;
 }
 .reading-pane__toast--visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Reading pane resize handle ──────────────────────────────────────────────
+   A thin drag target on the left edge of the pane. Only visible on desktop
+   (hidden on mobile where the pane is full-width). The ::after pseudo-element
+   provides a visible affordance on hover without adding DOM nodes. */
+.reading-pane__resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+  /* Widen the hit target without affecting visual width */
+  margin-left: -3px;
+}
+.reading-pane__resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 40px;
+  border-radius: 2px;
+  background: hsl(var(--border));
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.reading-pane__resize-handle:hover::after,
+.reading-pane--resizing .reading-pane__resize-handle::after {
+  opacity: 1;
+}
+/* During active resize: suppress text selection across the whole page */
+body.reading-pane-resizing {
+  user-select: none;
+  cursor: col-resize !important;
+}
+body.reading-pane-resizing * {
+  cursor: col-resize !important;
+}
+@media (max-width: 767px) {
+  .reading-pane__resize-handle { display: none; }
+}
 
 /* ── Theme-aware shadcn Button overrides ─────────────────────────────────────
    shadcn's Button component uses Tailwind utility classes. We patch the vars
