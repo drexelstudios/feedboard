@@ -28,6 +28,8 @@ export interface UserPrefs {
   readingWidth: ReadingWidth;
   /** Reading pane width in pixels — set by drag resize, persisted to DB */
   paneWidth: number;
+  /** Container max-width: "default" = 1400px, "wide" = 1920px */
+  containerWidth: "default" | "wide";
 }
 
 const DEFAULT_PREFS: UserPrefs = {
@@ -36,6 +38,7 @@ const DEFAULT_PREFS: UserPrefs = {
   fontScale: 1,
   readingWidth: "default",
   paneWidth: 480,
+  containerWidth: "default",
 };
 
 // ── Font injection ─────────────────────────────────────────────────────────────
@@ -543,6 +546,7 @@ export function applyPrefs(prefs: UserPrefs) {
   root.style.setProperty("--font-scale", String(prefs.fontScale));
   root.style.setProperty("--reading-pane-inner-max-width", READING_WIDTHS[prefs.readingWidth]);
   root.style.setProperty("--reading-pane-width", `${prefs.paneWidth ?? 480}px`);
+  root.style.setProperty("--content-wide", prefs.containerWidth === "wide" ? "1920px" : "1400px");
   root.setAttribute("data-theme", prefs.colorMode);
   root.classList.toggle("dark", prefs.colorMode === "dark");
 }
@@ -608,3 +612,5 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export function useTheme() {
   return useContext(ThemeCtx);
 }
+
+SHA: e6ae22df2d8cfddbcfc0d487a31626d4def4e28e
