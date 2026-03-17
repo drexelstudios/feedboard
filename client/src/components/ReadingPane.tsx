@@ -38,6 +38,34 @@ interface ExtractResult {
   error?: string;
 }
 
+/**
+ * Wraps raw email HTML in a minimal document so the iframe renders correctly.
+ * Injects an img-constrain style to prevent wide images from causing horizontal scroll.
+ * The sandbox="allow-same-origin allow-popups" attribute means:
+ *   - Links open in a new tab (allow-popups)
+ *   - The srcdoc can read its own DOM (allow-same-origin, needed for resize)
+ *   - Scripts are blocked (no allow-scripts) — intentional security boundary
+ */
+function buildNewsletterSrcdoc(html: string): string {
+  // If the email already has a full <html> document, inject our style into <head>.
+  // Otherwise wrap the fragment in a minimal document.
+  const hasHtmlTag = /<html[\s>]/i.test(html);
+  const styleTag = `<style>
+    img { max-width: 100% !important; height: auto !important; }
+    body { margin: 0; padding: 0; }
+  </style>`;
+
+  if (hasHtmlTag) {
+    // Inject before </head> if present, else right after <html>
+    if (/<\/head>/i.test(html)) {
+      return html.replace(/<\/head>/i, `${styleTag}</head>`);
+    }
+    return html.replace(/<html[\s>][^>]*>/i, (m) => `${m}${styleTag}`);
+  }
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${styleTag}</head><body>${html}</body></html>`;
+}
+
 export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps) {
   const [extractResult, setExtractResult] = useState<ExtractResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,6 +74,7 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const lastItemIdRef = useRef<string | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Mobile swipe tracking
   const touchStartX = useRef(0);
@@ -196,6 +225,31 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
       setTimeout(() => setToastVisible(false), 2000);
     } catch { /* silent */ }
   }, [item]);
+
+  // ── iframe auto-resize ───────────────────────────────────────────────────────
+  // Reads scrollHeight from the iframe's content document and sets the iframe
+  // height to match, eliminating internal scrollbars. Runs on load and on a
+  // short delay (images may finish loading after the initial onLoad fires).
+  const resizeIframe = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const resize = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow?.document;
+        if (!doc) return;
+        // Reset to auto first so shrinking works correctly
+        iframe.style.height = "0px";
+        const h = doc.documentElement.scrollHeight || doc.body?.scrollHeight || 0;
+        iframe.style.height = `${h}px`;
+      } catch {
+        // Cross-origin guard — shouldn't happen with srcdoc but be safe
+      }
+    };
+    resize();
+    // Re-run after images load
+    setTimeout(resize, 300);
+    setTimeout(resize, 1200);
+  }, []);
 
   if (!item) return null;
 
@@ -388,12 +442,27 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
             )}
           </div>
 
-          {/* Newsletter body — full-width, no extra padding (email HTML manages its own spacing) */}
+          {/* Newsletter body — sandboxed iframe so the app's CSS never bleeds in.
+              srcdoc receives the full email HTML (already DOMPurify-sanitized server-side).
+              sandbox="allow-same-origin allow-popups":
+                - allow-same-origin: lets us read scrollHeight for auto-resize
+                - allow-popups: lets links open in a new tab
+                - scripts intentionally blocked (no allow-scripts) */}
           {isNewsletter && !loading && extractResult && !extractResult.fallback && extractResult.content && (
-            <div
-              className="reading-pane__body reading-pane__body--newsletter"
-              // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: extractResult.content }}
+            <iframe
+              ref={iframeRef}
+              title="Newsletter content"
+              sandbox="allow-same-origin allow-popups"
+              srcDoc={buildNewsletterSrcdoc(extractResult.content)}
+              style={{
+                width: "100%",
+                border: "none",
+                display: "block",
+                // Height starts at 0; resizeIframe sets it after load
+                height: "0px",
+                overflow: "hidden",
+              }}
+              onLoad={resizeIframe}
             />
           )}
 
