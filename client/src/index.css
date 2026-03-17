@@ -530,84 +530,6 @@ body {
 .reading-pane__reading-time { display: flex; align-items: center; gap: 4px; }
 .reading-pane__excerpt { font-size: var(--text-sm); color: hsl(var(--muted-foreground)); line-height: 1.6; margin-bottom: var(--space-4); font-style: italic; }
 .reading-pane__body { font-size: 17px; line-height: 1.75; color: hsl(var(--foreground)); }
-/* Newsletter emails — force all tables to stretch full-width, remove centering margins */
-.reading-pane__body--newsletter { font-size: inherit; line-height: inherit; overflow-x: hidden; }
-.reading-pane__body--newsletter table {
-  width: 100% !important;
-  max-width: 100% !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-}
-/* Neutralise ALL borders and collapse spacer rows — email senders use
-   border="1", bgcolor contrast, and fixed-height empty rows for Outlook compat. */
-.reading-pane__body--newsletter table,
-.reading-pane__body--newsletter tr,
-.reading-pane__body--newsletter td,
-.reading-pane__body--newsletter th,
-.reading-pane__body--newsletter div,
-.reading-pane__body--newsletter span {
-  border: none !important;
-  border-color: transparent !important;
-  outline: none !important;
-  background-color: transparent !important;
-  background-image: none !important;
-}
-/* Collapse fixed heights and vertical padding that email spacer rows use for gaps.
-   Emails use height="30", style="height:30px", font-size:30px, and padding:30px
-   as spacing mechanisms. Override all of them.
-   div: only collapse height/padding — NOT font-size or margins, which break email layouts.
-   tr/td/th: also reset line-height and font-size (used as invisible spacer tricks in table cells). */
-.reading-pane__body--newsletter tr,
-.reading-pane__body--newsletter td,
-.reading-pane__body--newsletter th {
-  height: auto !important;
-  min-height: 0 !important;
-  line-height: normal !important;
-  font-size: inherit !important;
-  padding-top: 4px !important;
-  padding-bottom: 4px !important;
-}
-/* For div: only collapse fixed heights — do NOT override padding or margins.
-   Unlike table cells, email divs often have zero padding that we'd incorrectly inflate,
-   and they use margins for intentional section spacing we want to preserve.
-   Padding capping for divs is handled by JSDOM server-side only. */
-.reading-pane__body--newsletter div {
-  height: auto !important;
-  min-height: 0 !important;
-}
-/* Hide tiny spacer/tracking images (width or height ≤ 4px) */
-.reading-pane__body--newsletter img[width="1"],
-.reading-pane__body--newsletter img[width="2"],
-.reading-pane__body--newsletter img[width="3"],
-.reading-pane__body--newsletter img[width="4"],
-.reading-pane__body--newsletter img[height="1"],
-.reading-pane__body--newsletter img[height="2"],
-.reading-pane__body--newsletter img[height="3"],
-.reading-pane__body--newsletter img[height="4"] {
-  display: none !important;
-}
-/* Re-allow coloured backgrounds on text content elements (callout boxes etc) */
-.reading-pane__body--newsletter p,
-.reading-pane__body--newsletter h1,
-.reading-pane__body--newsletter h2,
-.reading-pane__body--newsletter h3,
-.reading-pane__body--newsletter h4,
-.reading-pane__body--newsletter h5,
-.reading-pane__body--newsletter h6,
-.reading-pane__body--newsletter a,
-.reading-pane__body--newsletter strong,
-.reading-pane__body--newsletter em,
-.reading-pane__body--newsletter li {
-  background-color: revert;
-  background-image: revert;
-}
-/* Also strip common email-boilerplate spacing attributes via CSS */
-.reading-pane__body--newsletter table[cellpadding],
-.reading-pane__body--newsletter table[cellspacing] {
-  border-collapse: collapse !important;
-}
-.reading-pane__body--newsletter img { max-width: 100% !important; height: auto !important; }
-.reading-pane__body--newsletter center { width: 100% !important; display: block; }
 @media (max-width: 767px) { .reading-pane__body { font-size: 16px; line-height: 1.7; } }
 .reading-pane__body p { margin-bottom: 1.25em; }
 .reading-pane__body h1,.reading-pane__body h2,.reading-pane__body h3,
@@ -660,3 +582,4 @@ body {
   transition: opacity 200ms ease, transform 200ms ease;
 }
 .reading-pane__toast--visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
