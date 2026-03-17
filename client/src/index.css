@@ -654,6 +654,14 @@ body.reading-pane-resizing * {
   .reading-pane__resize-handle { display: none; }
 }
 
+/* ── Header icon button scaling ──────────────────────────────────────────────
+   The three icon buttons (refresh, theme toggle, settings) use p-2 which is
+   static 8px. Wire them to scale with --btn-height-sm so they feel proportional. */
+header button.p-2,
+header button[class*="p-2"] {
+  padding: calc((var(--btn-height-sm, 34px) - 16px) / 2);
+}
+
 /* ── Theme-aware shadcn Button overrides ─────────────────────────────────────
    shadcn's Button component uses Tailwind utility classes. We patch the vars
    it references so height/padding/weight adapt per theme without touching
