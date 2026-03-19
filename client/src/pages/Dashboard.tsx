@@ -99,6 +99,16 @@ export default function Dashboard() {
     apiRequest("POST", "/api/scrape/refresh-due").catch(() => {/* silent */});
   }, []);
 
+  // On first load of each session, kick off a newsletter IMAP sync so
+  // emails arrive immediately rather than waiting for the nightly cron.
+  // sessionStorage flag prevents re-firing on re-renders or tab switches.
+  useEffect(() => {
+    const key = "feedboard:nl-synced";
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+    apiRequest("POST", "/api/newsletter/sync").catch(() => {/* silent */});
+  }, []);
+
   // Reading pane: sessionStorage restore on mount
   // Restore previously selected item when page is refreshed
   const { data: allFeeds = [] } = useQuery<Feed[]>({ queryKey: ["/api/feeds"], enabled: false });
