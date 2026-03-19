@@ -25,6 +25,43 @@ const parser = new Parser({
 const feedCache: Map<number, { items: any[]; fetchedAt: number }> = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// ── Rate limiter ─────────────────────────────────────────────────────────────
+// Simple in-memory per-user sliding window. No external dependency needed.
+// Map key: `${userId}:${action}` → array of timestamps (ms)
+const rateLimitWindows: Map<string, number[]> = new Map();
+
+function checkRateLimit(
+  userId: string,
+  action: string,
+  maxRequests: number,
+  windowMs: number
+): { allowed: boolean; retryAfterMs: number } {
+  const key = `${userId}:${action}`;
+  const now = Date.now();
+  const windowStart = now - windowMs;
+  const timestamps = (rateLimitWindows.get(key) || []).filter((t) => t > windowStart);
+  if (timestamps.length >= maxRequests) {
+    const retryAfterMs = timestamps[0] + windowMs - now;
+    return { allowed: false, retryAfterMs };
+  }
+  timestamps.push(now);
+  rateLimitWindows.set(key, timestamps);
+  // Prune old entries periodically to avoid unbounded memory growth
+  if (rateLimitWindows.size > 10000) {
+    for (const [k, ts] of rateLimitWindows) {
+      if (ts.every((t) => t <= windowStart)) rateLimitWindows.delete(k);
+    }
+  }
+  return { allowed: true, retryAfterMs: 0 };
+}
+
+// ── Zod URL validator ────────────────────────────────────────────────────────
+const httpUrlSchema = z.string().url().refine(
+  (u) => u.startsWith("http://") || u.startsWith("https://"),
+  { message: "URL must use http or https" }
+);
+const slugSchema = z.string().regex(/^[a-z0-9-]+$/, "Invalid slug");
+
 /**
  * Fetch raw XML and sanitize common malformed patterns before parsing.
  * Fixes bare & characters (e.g. "foo & bar" → "foo &amp; bar") that
@@ -472,6 +509,20 @@ export function registerRoutes(httpServer: Server, app: Express) {
     // This handles the race where item-meta hasn't returned yet when the pane opens.
     if (!url) {
       return res.status(400).json({ error: "url required", fallback: true });
+    }
+    // Validate URL is a real http/https address before fetching
+    const urlCheck = httpUrlSchema.safeParse(url);
+    if (!urlCheck.success) {
+      return res.status(400).json({ error: "Invalid URL", fallback: true });
+    }
+    // Rate limit: 10 extractions per minute per user
+    const rl = checkRateLimit(req.userId!, "extract", 10, 60_000);
+    if (!rl.allowed) {
+      return res.status(429).json({
+        error: "Too many requests — please wait a moment",
+        fallback: true,
+        retryAfterMs: rl.retryAfterMs,
+      });
     }
 
     try {
@@ -1204,8 +1255,20 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
   // Full AI scrape — creates/updates scraped_feed record and runs Claude extraction
   app.post("/api/scrape", requireAuth, async (req, res) => {
+    // Rate limit: 5 feed creations per minute per user
+    const rlCreate = checkRateLimit(req.userId!, "scrape-create", 5, 60_000);
+    if (!rlCreate.allowed) {
+      return res.status(429).json({
+        error: "Too many requests — please wait a moment",
+        retryAfterMs: rlCreate.retryAfterMs,
+      });
+    }
     const { url, feedId } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
+    const scrapeUrlCheck = httpUrlSchema.safeParse(url);
+    if (!scrapeUrlCheck.success) {
+      return res.status(400).json({ error: "Invalid URL" });
+    }
 
     let activeFeedId = feedId;
 
@@ -1262,6 +1325,19 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.post("/api/scrape/rescan", requireAuth, async (req, res) => {
     const { slug, feedId } = req.body;
     if (!slug) return res.status(400).json({ error: "slug required" });
+    // Validate slug format
+    const slugCheck = slugSchema.safeParse(slug);
+    if (!slugCheck.success) {
+      return res.status(400).json({ error: "Invalid slug" });
+    }
+    // Rate limit: 1 rescan per feed per minute
+    const rl = checkRateLimit(req.userId!, `rescan:${slug}`, 1, 60_000);
+    if (!rl.allowed) {
+      return res.status(429).json({
+        error: "Feed was just rescanned — please wait a moment before trying again",
+        retryAfterMs: rl.retryAfterMs,
+      });
+    }
     const { data: feed, error } = await supabaseAdmin
       .from("scraped_feeds")
       .select("*")
