@@ -251,14 +251,14 @@ export async function scrapeFeed(
             title: item.title,
             link,
             description: item.description || "",
-            pub_date: item.pubDate ? new Date(item.pubDate).toISOString() : null,
+            pub_date: item.pubDate ? new Date(item.pubDate).toISOString() : new Date().toISOString(),
             guid: link,
           };
         });
 
       await supabase
         .from("scraped_posts")
-        .upsert(posts, { onConflict: "feed_id,guid", ignoreDuplicates: true });
+        .upsert(posts, { onConflict: "feed_id,guid", ignoreDuplicates: false });
 
       // Prune posts older than 90 days
       await supabase
