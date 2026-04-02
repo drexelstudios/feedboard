@@ -20,7 +20,7 @@ const buttonVariants = cva(
         ghost: "border border-transparent",
       },
       size: {
-        default: "min-h-9 px-4 py-2",
+        default: "min-h-11 md:min-h-9 px-4 py-2",
         // sm: use CSS vars for height and padding so theme + font-scale work
         sm: "rounded-md text-xs [height:var(--btn-height-sm,34px)] [min-height:var(--btn-height-sm,34px)] [padding-left:var(--btn-padding-x-sm,0.875rem)] [padding-right:var(--btn-padding-x-sm,0.875rem)]",
         lg: "min-h-10 rounded-md px-8",
