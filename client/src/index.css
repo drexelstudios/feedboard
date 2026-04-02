@@ -219,28 +219,15 @@ body {
   border-radius: var(--radius-sm);
 }
 
-/* ── Feed grid ──────────────────────────────────────────────────────────────── */
+/* ── Feed grid (main layout handled by MasonryGrid.tsx) ────────────────────── */
+/* Skeleton loading grid — simple CSS grid, no masonry needed */
 .feed-masonry {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
-  align-items: start;
 }
-.feed-masonry-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; align-items: start; }
-.feed-masonry-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; align-items: start; }
-
-@media (max-width: 900px) {
-  .feed-masonry, .feed-masonry-4 { grid-template-columns: repeat(2, 1fr); }
-}
-@media (max-width: 600px) {
-  .feed-masonry, .feed-masonry-2, .feed-masonry-4 { grid-template-columns: 1fr; }
-}
-
-.feed-masonry .feed-widget,
-.feed-masonry-2 .feed-widget,
-.feed-masonry-4 .feed-widget {
-  min-width: 0;
-}
+@media (max-width: 900px) { .feed-masonry { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .feed-masonry { grid-template-columns: 1fr; } }
 
 /* ── Feed widget ─────────────────────────────────────────────────────────────── */
 .feed-widget {

@@ -1,4 +1,5 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, useSyncExternalStore } from "react";
+import MasonryGrid from "@/components/MasonryGrid";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   DndContext,
@@ -50,6 +51,14 @@ import { useToast } from "@/hooks/use-toast";
 
 type Columns = 2 | 3 | 4;
 
+function useWindowWidth() {
+  return useSyncExternalStore(
+    (cb) => { window.addEventListener("resize", cb); return () => window.removeEventListener("resize", cb); },
+    () => window.innerWidth,
+    () => 1280,
+  );
+}
+
 export default function Dashboard() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [columns, setColumns] = useState<Columns>(
@@ -81,6 +90,8 @@ export default function Dashboard() {
   const [showRssManager, setShowRssManager] = useState(false);
 
   const { toast } = useToast();
+  const windowWidth = useWindowWidth();
+  const effectiveColumns = windowWidth <= 600 ? 1 : windowWidth <= 900 ? 2 : columns;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -551,13 +562,7 @@ export default function Dashboard() {
                 items={filteredFeeds.map((f) => f.id)}
                 strategy={rectSortingStrategy}
               >
-                <div
-                  className={cn(
-                    columns === 2 ? "feed-masonry-2" :
-                    columns === 4 ? "feed-masonry-4" :
-                    "feed-masonry"
-                  )}
-                >
+                <MasonryGrid columns={effectiveColumns} gap={16}>
                   {filteredFeeds.map((feed) => (
                     <FeedWidget
                       key={feed.id}
@@ -567,7 +572,7 @@ export default function Dashboard() {
                       onItemClick={handleItemClick}
                     />
                   ))}
-                </div>
+                </MasonryGrid>
               </SortableContext>
 
               <DragOverlay>
