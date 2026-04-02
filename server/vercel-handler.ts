@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { createServer } from "http";
 
 const app = express();
+app.disable("x-powered-by");
 const httpServer = createServer(app);
 
 declare module "http" {
@@ -33,7 +34,6 @@ app.use((_req, res, next) => {
   );
   next();
 });
-app.disable("x-powered-by");
 
 app.use((req, res, next) => {
   const start = Date.now();

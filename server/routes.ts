@@ -238,29 +238,31 @@ async function upsertFeedItems(
 }
 
 export function registerRoutes(httpServer: Server, app: Express) {
-  // ── Diagnostic: test jsdom/readability in Vercel runtime (no auth) ─────────
-  app.get("/api/extract/ping", async (_req, res) => {
-    const steps: string[] = [];
-    try {
-      steps.push("start");
-      const jsdomMod = require("jsdom");
-      steps.push("jsdom loaded");
-      const { JSDOM } = jsdomMod;
-      const dom = new JSDOM("<html><body><article><p>Hello world test content for readability parsing.</p></article></body></html>", { url: "https://example.com" });
-      steps.push("JSDOM instantiated");
-      const { Readability } = require("@mozilla/readability");
-      steps.push("Readability loaded");
-      const article = new Readability(dom.window.document).parse();
-      steps.push("Readability parsed: " + (article ? article.title || "ok" : "null"));
-      const DOMPurify = require("isomorphic-dompurify").default;
-      steps.push("DOMPurify loaded");
-      const clean = DOMPurify.sanitize("<p>test</p>");
-      steps.push("DOMPurify sanitized: " + clean);
-      res.json({ ok: true, steps });
-    } catch (e: any) {
-      res.json({ ok: false, steps, error: e.message, stack: e.stack?.slice(0, 500) });
-    }
-  });
+  // ── Diagnostic: test jsdom/readability (dev only) ─────────────────────────
+  if (process.env.NODE_ENV !== "production") {
+    app.get("/api/extract/ping", async (_req, res) => {
+      const steps: string[] = [];
+      try {
+        steps.push("start");
+        const jsdomMod = require("jsdom");
+        steps.push("jsdom loaded");
+        const { JSDOM } = jsdomMod;
+        const dom = new JSDOM("<html><body><article><p>Hello world test content for readability parsing.</p></article></body></html>", { url: "https://example.com" });
+        steps.push("JSDOM instantiated");
+        const { Readability } = require("@mozilla/readability");
+        steps.push("Readability loaded");
+        const article = new Readability(dom.window.document).parse();
+        steps.push("Readability parsed: " + (article ? article.title || "ok" : "null"));
+        const DOMPurify = require("isomorphic-dompurify").default;
+        steps.push("DOMPurify loaded");
+        const clean = DOMPurify.sanitize("<p>test</p>");
+        steps.push("DOMPurify sanitized: " + clean);
+        res.json({ ok: true, steps });
+      } catch (e: any) {
+        res.json({ ok: false, steps, error: e.message });
+      }
+    });
+  }
 
   // ── Seed endpoint (called once after first login) ──────────────────────────
   app.post("/api/auth/seed", requireAuth, async (req, res) => {
@@ -268,7 +270,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
       await storage.seedDefaultData(req.userId!);
       res.json({ success: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/auth/seed]", e);
+      res.status(500).json({ error: "Failed to initialize account" });
     }
   });
 
@@ -910,8 +913,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
         fallback: false,
       });
     } catch (e: any) {
-      console.error("[/api/extract error]", e.message);
-      return res.json({ error: e.message, fallback: true });
+      console.error("[/api/extract error]", e);
+      return res.json({ error: "Failed to extract article content", fallback: true });
     }
   });
 
@@ -930,7 +933,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
         .maybeSingle();
       res.json(data?.prefs ?? {});
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/preferences GET]", e);
+      res.status(500).json({ error: "Failed to load preferences" });
     }
   });
 
@@ -952,7 +956,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
         );
       res.json({ ok: true });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/preferences POST]", e);
+      res.status(500).json({ error: "Failed to save preferences" });
     }
   });
 
@@ -1166,7 +1171,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const result = await fetchNewsletters(req.userId!);
       res.json(result);
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/newsletter/sync]", e);
+      res.status(500).json({ error: "Failed to sync newsletters" });
     }
   });
 
@@ -1232,7 +1238,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
       res.json({ ran: results.length, results, newsletters: newsletterResult });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/cron/scrape]", e);
+      res.status(500).json({ error: "Cron job failed" });
     }
   });
 
@@ -1260,7 +1267,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
         scrapeFeed(feed.source_url, feed.id, req.userId!).catch(() => {});
       }
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/scrape/refresh-due]", e);
+      res.status(500).json({ error: "Failed to refresh scraped feeds" });
     }
   });
 
@@ -1392,7 +1400,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
       if (!result.success) throw new Error(result.error || "Scrape failed");
       res.json({ success: true, itemsCount: result.itemsCount });
     } catch (e: any) {
-      res.status(500).json({ error: e.message });
+      console.error("[/api/scrape/rescan]", e);
+      res.status(500).json({ error: "Failed to rescan feed" });
     }
   });
 
