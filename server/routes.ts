@@ -60,6 +60,29 @@ const httpUrlSchema = z.string().url().refine(
   (u) => u.startsWith("http://") || u.startsWith("https://"),
   { message: "URL must use http or https" }
 );
+
+// ── SSRF protection ─────────────────────────────────────────────────────────
+function isPrivateHostname(hostname: string): boolean {
+  const patterns = [
+    /^127\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
+    /^169\.254\./, /^0\./, /^::1$/, /^fc00:/i, /^fd00:/i, /^fe80:/i,
+    /^localhost$/i, /^\[::1\]$/,
+  ];
+  return patterns.some((p) => p.test(hostname));
+}
+
+function validatePublicUrl(raw: string): URL {
+  if (raw.length > 2048) throw new Error("URL too long");
+  if (/[\x00\r\n]/.test(raw)) throw new Error("URL contains invalid characters");
+  const parsed = new URL(raw); // throws on malformed URLs
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("URL must use http or https");
+  }
+  if (isPrivateHostname(parsed.hostname)) {
+    throw new Error("URLs pointing to private/internal networks are not allowed");
+  }
+  return parsed;
+}
 const slugSchema = z.string().regex(/^[a-z0-9-]+$/, "Invalid slug");
 
 /**
@@ -157,9 +180,10 @@ declare global {
 
 async function requireAuth(req: Request, res: Response, next: NextFunction) {
   // ── Dev auth bypass ────────────────────────────────────────────────────────
-  // When DEV_BYPASS_AUTH=true (Preview env only) and the request carries the
-  // special header set by queryClient.ts, skip Supabase and inject the dev user.
+  // Only allowed in development. Requires DEV_BYPASS_AUTH=true and the special
+  // header set by queryClient.ts.
   if (
+    process.env.NODE_ENV !== "production" &&
     process.env.DEV_BYPASS_AUTH === "true" &&
     req.headers["x-dev-bypass-auth"] === "true"
   ) {
@@ -266,6 +290,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
     try {
+      validatePublicUrl(url);
+    } catch {
+      return res.status(400).json({ error: "Invalid URL. Only public http/https URLs are allowed." });
+    }
+    try {
       const feed = await fetchAndParse(url);
       res.json({
         title: feed.title || "",
@@ -275,8 +304,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
           pubDate: item.pubDate || "",
         })),
       });
-    } catch (e: any) {
-      res.status(400).json({ error: "Could not parse RSS feed: " + e.message });
+    } catch {
+      res.status(400).json({ error: "Could not parse RSS feed from that URL" });
     }
   });
 
@@ -600,7 +629,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
             "div", "span", "hr", "center",
           ],
           ALLOWED_ATTR: [
-            "href", "src", "alt", "title", "class", "style",
+            "href", "src", "alt", "title", "class",
             "target", "rel", "width", "height", "align",
             "border", "cellpadding", "cellspacing", "valign",
           ],
@@ -1240,6 +1269,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
     try {
+      validatePublicUrl(url);
+    } catch {
+      return res.status(400).json({ error: "Invalid URL. Only public http/https URLs are allowed." });
+    }
+    try {
       const resp = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; Feedhunt/1.0)", "Accept": "text/html,*/*" },
         signal: AbortSignal.timeout(10000),
@@ -1249,12 +1283,11 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const html = await resp.text();
       const cleaned = cleanHtml(html, url);
       const items = quickExtract(html, url);
-      // Extract title from <title> tag
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
       const siteTitle = titleMatch ? titleMatch[1].trim() : new URL(url).hostname;
       res.json({ siteTitle, items: items.slice(0, 10) });
-    } catch (e: any) {
-      res.status(400).json({ error: e.message });
+    } catch {
+      res.status(400).json({ error: "Could not fetch or parse that URL" });
     }
   });
 

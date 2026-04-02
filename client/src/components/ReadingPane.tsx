@@ -515,7 +515,7 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
               <iframe
                 ref={iframeRef}
                 title="Newsletter content"
-                sandbox="allow-same-origin allow-popups"
+                sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                 srcDoc={buildNewsletterSrcdoc(extractResult.content)}
                 style={{
                   border: "none",
