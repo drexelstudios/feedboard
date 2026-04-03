@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, RefreshCw, LogOut, Sparkles, Settings } from "lucide-react";
+import { Plus, RefreshCw, LogOut, Sparkles, Settings, Search } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import type { Feed } from "@shared/schema";
@@ -17,9 +17,10 @@ import SettingsPanel from "@/components/SettingsPanel";
 interface HeaderProps {
   onAddFeed: () => void;
   onCreateFeed: () => void;
+  onSearchFeed: () => void;
 }
 
-export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
+export default function Header({ onAddFeed, onCreateFeed, onSearchFeed }: HeaderProps) {
   const { user, signOut } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -117,6 +118,17 @@ export default function Header({ onAddFeed, onCreateFeed }: HeaderProps) {
             >
               <Sparkles size={13} />
               <span className="hidden sm:inline">Create Feed</span>
+            </Button>
+
+            <Button
+              data-testid="button-search-feed"
+              onClick={onSearchFeed}
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs font-semibold flex"
+            >
+              <Search size={13} />
+              <span className="hidden sm:inline">Search Feed</span>
             </Button>
 
             <Button

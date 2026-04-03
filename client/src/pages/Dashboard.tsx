@@ -40,6 +40,7 @@ import type { EnrichedFeedItem } from "@/components/FeedWidget";
 import ReadingPane from "@/components/ReadingPane";
 import AddFeedDialog from "@/components/AddFeedDialog";
 import FeedCreatorDialog from "@/components/FeedCreatorDialog";
+import SearchFeedDialog from "@/components/SearchFeedDialog";
 import NewsletterManager from "@/components/NewsletterManager";
 import RSSManager from "@/components/RSSManager";
 import Header from "@/components/Header";
@@ -69,6 +70,7 @@ export default function Dashboard() {
   );
   const [showAddFeed, setShowAddFeed] = useState(false);
   const [showCreateFeed, setShowCreateFeed] = useState(false);
+  const [showSearchFeed, setShowSearchFeed] = useState(false);
   const [prefillUrl, setPrefillUrl] = useState<string | undefined>();
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
   // Inline rename state
@@ -266,7 +268,7 @@ export default function Dashboard() {
       className={cn("min-h-screen flex flex-col", isPaneOpen && "pane-open")}
       style={{ background: "hsl(var(--background))" }}
     >
-      <Header onAddFeed={() => setShowAddFeed(true)} onCreateFeed={() => setShowCreateFeed(true)} />
+      <Header onAddFeed={() => setShowAddFeed(true)} onCreateFeed={() => setShowCreateFeed(true)} onSearchFeed={() => setShowSearchFeed(true)} />
 
       {/* Category tabs + layout toggle */}
       <div
@@ -627,6 +629,12 @@ export default function Dashboard() {
           setPrefillTitle(title);
           setShowAddFeed(true);
         }}
+      />
+
+      <SearchFeedDialog
+        open={showSearchFeed}
+        onOpenChange={setShowSearchFeed}
+        categories={categoryNames}
       />
 
       <NewsletterManager
