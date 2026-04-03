@@ -7,13 +7,14 @@ export default function DemoBanner() {
 
   return (
     <div
-      className="sticky top-0 z-50 flex items-center justify-between gap-3 px-4 py-2.5 text-sm font-medium"
+      id="demo-banner"
+      className="sticky top-0 z-50 flex items-center justify-between gap-2 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium"
       style={{
         background: "hsl(var(--primary))",
         color: "hsl(var(--primary-foreground))",
       }}
     >
-      <div className="flex items-center gap-3 flex-1 justify-center">
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 justify-center flex-wrap">
         <span className="opacity-90">
           You're viewing a live preview of Feedhunt.
         </span>

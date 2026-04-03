@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
@@ -6,7 +6,16 @@ import FeedWidget from "@/components/FeedWidget";
 import type { EnrichedFeedItem } from "@/components/FeedWidget";
 import ReadingPane from "@/components/ReadingPane";
 import DemoBanner from "@/components/DemoBanner";
+import MasonryGrid from "@/components/MasonryGrid";
 import { cn } from "@/lib/utils";
+
+function useWindowWidth() {
+  return useSyncExternalStore(
+    (cb) => { window.addEventListener("resize", cb); return () => window.removeEventListener("resize", cb); },
+    () => window.innerWidth,
+    () => 1280,
+  );
+}
 
 type Columns = 2 | 3 | 4;
 
@@ -29,6 +38,25 @@ export default function DemoDashboard() {
   const [columns, setColumns] = useState<Columns>(3);
   const [selectedItem, setSelectedItem] = useState<EnrichedFeedItem | null>(null);
   const [isPaneOpen, setIsPaneOpen] = useState(false);
+  const windowWidth = useWindowWidth();
+  const effectiveColumns = windowWidth <= 600 ? 1 : windowWidth <= 900 ? 2 : columns;
+
+  // Measure banner + header heights for sticky offsets
+  const headerRef = useRef<HTMLElement>(null);
+  const [bannerH, setBannerH] = useState(40);
+  const [headerH, setHeaderH] = useState(56);
+
+  useEffect(() => {
+    const measure = () => {
+      const b = document.getElementById("demo-banner");
+      const h = headerRef.current;
+      setBannerH(b?.offsetHeight ?? 0);
+      setHeaderH(h?.offsetHeight ?? 56);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   const { data } = useQuery<DemoFeedsResponse>({
     queryKey: ["/api/demo/feeds"],
@@ -47,12 +75,13 @@ export default function DemoDashboard() {
   const widgetFeeds = filteredFeeds.map((f) => ({
     id: f.id,
     title: f.title,
-    url: `/api/demo/feed-items/${f.id}`,   // FeedWidget fetches this URL for items
+    url: `/api/demo/feed-items/${f.id}`,
+    description: "",
+    favicon: "",
     category: f.category,
     maxItems: f.maxItems,
-    userId: "",
     position: 0,
-    categoryId: null,
+    collapsed: false,
   }));
 
   const handleItemClick = (item: EnrichedFeedItem) => {
@@ -75,8 +104,9 @@ export default function DemoDashboard() {
 
       {/* Header */}
       <header
-        className="sticky top-[40px] z-40 border-b"
-        style={{ background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
+        ref={headerRef}
+        className="sticky z-40 border-b"
+        style={{ top: bannerH, background: "hsl(var(--card))", borderColor: "hsl(var(--border))" }}
       >
         <div
           className="flex items-center justify-between px-4 sm:px-6 h-14"
@@ -127,8 +157,8 @@ export default function DemoDashboard() {
 
       {/* Category tabs */}
       <div
-        className="sticky top-[96px] z-30 border-b"
-        style={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
+        className="sticky z-30 border-b"
+        style={{ top: bannerH + headerH, background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
       >
         <div
           className="flex items-center justify-between gap-3 px-4 sm:px-6"
@@ -169,8 +199,8 @@ export default function DemoDashboard() {
             ))}
           </div>
 
-          {/* Column toggle */}
-          <div className="flex items-center gap-1 shrink-0">
+          {/* Column toggle — hidden on mobile */}
+          <div className="hidden md:flex items-center gap-1 shrink-0">
             {([2, 3, 4] as Columns[]).map((n) => (
               <button
                 key={n}
@@ -199,13 +229,7 @@ export default function DemoDashboard() {
           className="flex-1 overflow-y-auto p-4 sm:p-6"
           style={{ maxWidth: "var(--content-wide)", margin: "0 auto", width: "100%" }}
         >
-          <div
-            className={cn(
-              columns === 2 ? "feed-masonry-2" :
-              columns === 4 ? "feed-masonry-4" :
-              "feed-masonry"
-            )}
-          >
+          <MasonryGrid columns={effectiveColumns} gap={16}>
             {widgetFeeds.map((feed) => (
               <FeedWidget
                 key={feed.id}
@@ -216,7 +240,7 @@ export default function DemoDashboard() {
                 isDemoMode
               />
             ))}
-          </div>
+          </MasonryGrid>
         </main>
 
         {/* Reading pane */}
