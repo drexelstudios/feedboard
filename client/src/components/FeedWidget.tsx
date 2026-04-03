@@ -25,6 +25,8 @@ interface FeedWidgetProps {
   // Reading pane props (Phase 4/6)
   selectedItemId?: string | null;
   onItemClick?: (item: EnrichedFeedItem) => void;
+  // Demo mode: fetches from /api/demo/feed-items, hides edit/delete/drag controls
+  isDemoMode?: boolean;
 }
 
 export interface FeedItem {
@@ -63,7 +65,7 @@ interface ItemMeta {
   reading_time_minutes: number | null;
 }
 
-export default function FeedWidget({ feed, isDragging, selectedItemId, onItemClick }: FeedWidgetProps) {
+export default function FeedWidget({ feed, isDragging, selectedItemId, onItemClick, isDemoMode }: FeedWidgetProps) {
   const [showEdit, setShowEdit] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortableDragging } =
@@ -75,37 +77,35 @@ export default function FeedWidget({ feed, isDragging, selectedItemId, onItemCli
     opacity: isSortableDragging ? 0.4 : 1,
   };
 
-  const { data, isLoading, isError } = useQuery<{ items: FeedItem[]; cached: boolean }>({
-    queryKey: [`/api/feeds/${feed.id}/items`],
-    staleTime: 4 * 60 * 1000,
+  // Demo feeds use a dedicated public endpoint; regular feeds use the authed endpoint.
+  const itemsQueryKey = isDemoMode
+    ? [`/api/demo/feed-items/${feed.id}`]
+    : [`/api/feeds/${feed.id}/items`];
+
+  const { data, isLoading, isError } = useQuery<{ items: FeedItem[]; cached: boolean } | FeedItem[]>({
+    queryKey: itemsQueryKey,
+    staleTime: isDemoMode ? 30 * 60 * 1000 : 4 * 60 * 1000,
   });
 
+  // Demo endpoint returns a plain array; regular endpoint returns { items, cached }
+  const resolvedData = isDemoMode
+    ? { items: (data as FeedItem[]) ?? [], cached: false }
+    : (data as { items: FeedItem[]; cached: boolean }) ?? { items: [], cached: false };
+
   // Detect feed type from first item (newsletter items have sourceType set)
-  const isNewsletterFeed = (data?.items ?? []).some((item) => item.sourceType === "newsletter");
+  const isNewsletterFeed = (resolvedData?.items ?? []).some((item) => item.sourceType === "newsletter");
 
   // Item metadata from Supabase (stable IDs + thumbnails) — only for RSS feeds
   const { data: itemMeta } = useQuery<Record<string, ItemMeta>>({
     queryKey: [`/api/feeds/${feed.id}/item-meta`],
-    // Newsletter items arrive pre-enriched; skip the item-meta query for them
-    enabled: !!data?.items?.length && !isNewsletterFeed,
+    // Newsletter items arrive pre-enriched; skip the item-meta query for them.
+    // Demo mode never needs item-meta (no Supabase rows).
+    enabled: !!resolvedData?.items?.length && !isNewsletterFeed && !isDemoMode,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Scraped (Feed Creator) feeds have a URL pointing to our own /api/feed/<slug> endpoint.
-  // For those, refresh triggers a full re-scrape (Claude) so new articles are discovered.
-  // For regular RSS feeds, refresh just busts the cache and re-fetches the RSS.
-  const scrapedSlug = (() => {
-    try {
-      const m = new URL(feed.url).pathname.match(/\/api\/feed\/([^/]+)/);
-      return m ? m[1] : null;
-    } catch { return null; }
-  })();
-
   const refreshMutation = useMutation({
-    mutationFn: () =>
-      scrapedSlug
-        ? apiRequest("POST", "/api/scrape/rescan", { slug: scrapedSlug, feedId: feed.id })
-        : apiRequest("POST", `/api/feeds/${feed.id}/refresh`),
+    mutationFn: () => apiRequest("POST", `/api/feeds/${feed.id}/refresh`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/feeds/${feed.id}/items`] });
       queryClient.invalidateQueries({ queryKey: [`/api/feeds/${feed.id}/item-meta`] });
@@ -125,7 +125,7 @@ export default function FeedWidget({ feed, isDragging, selectedItemId, onItemCli
 
   const faviconUrl = feed.favicon || getFaviconUrl(feed.url);
   const categoryColor = getCategoryColor(feed.category);
-  const items = data?.items || [];
+  const items = resolvedData?.items || [];
 
   // Enrich items with Supabase metadata
   const enrichedItems: EnrichedFeedItem[] = items.map((item) => {
@@ -177,8 +177,8 @@ export default function FeedWidget({ feed, isDragging, selectedItemId, onItemCli
       data-testid={`widget-feed-${feed.id}`}
     >
       {/* Widget header */}
-      <div className="widget-header" {...attributes} {...listeners}>
-        <GripVertical size={12} className="text-muted-foreground flex-shrink-0 opacity-40" />
+      <div className="widget-header" {...(!isDemoMode ? { ...attributes, ...listeners } : {})}>
+        {!isDemoMode && <GripVertical size={12} className="text-muted-foreground flex-shrink-0 opacity-40" />}
 
         {/* Favicon */}
         <img
@@ -201,8 +201,8 @@ export default function FeedWidget({ feed, isDragging, selectedItemId, onItemCli
 
         {/* Actions */}
         <div className="widget-actions">
-          {/* Refresh button — RSS only; newsletters sync via IMAP */}
-          {!isNewsletterFeed && (
+          {/* Refresh + Settings + Delete — hidden in demo mode */}
+          {!isDemoMode && !isNewsletterFeed && (
             <button
               data-testid={`button-refresh-${feed.id}`}
               onClick={(e) => { e.stopPropagation(); refreshMutation.mutate(); }}
@@ -216,15 +216,17 @@ export default function FeedWidget({ feed, isDragging, selectedItemId, onItemCli
               />
             </button>
           )}
-          <button
-            data-testid={`button-settings-${feed.id}`}
-            onClick={(e) => { e.stopPropagation(); setShowEdit(true); }}
-            className="p-1 rounded transition-colors hover:bg-accent"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-            title="Settings"
-          >
-            <Settings size={12} />
-          </button>
+          {!isDemoMode && (
+            <button
+              data-testid={`button-settings-${feed.id}`}
+              onClick={(e) => { e.stopPropagation(); setShowEdit(true); }}
+              className="p-1 rounded transition-colors hover:bg-accent"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+              title="Settings"
+            >
+              <Settings size={12} />
+            </button>
+          )}
           <button
             data-testid={`button-collapse-${feed.id}`}
             onClick={(e) => { e.stopPropagation(); toggleCollapseMutation.mutate(!feed.collapsed); }}
@@ -234,15 +236,17 @@ export default function FeedWidget({ feed, isDragging, selectedItemId, onItemCli
           >
             {feed.collapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
           </button>
-          <button
-            data-testid={`button-delete-${feed.id}`}
-            onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${feed.title}"?`)) deleteMutation.mutate(); }}
-            className="p-1 rounded transition-colors hover:bg-destructive/20"
-            style={{ color: "hsl(var(--muted-foreground))" }}
-            title="Remove feed"
-          >
-            <Trash2 size={12} />
-          </button>
+          {!isDemoMode && (
+            <button
+              data-testid={`button-delete-${feed.id}`}
+              onClick={(e) => { e.stopPropagation(); if (confirm(`Remove "${feed.title}"?`)) deleteMutation.mutate(); }}
+              className="p-1 rounded transition-colors hover:bg-destructive/20"
+              style={{ color: "hsl(var(--muted-foreground))" }}
+              title="Remove feed"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
       </div>
 

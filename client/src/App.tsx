@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider, useAuth } from "@/components/AuthProvider";
 import { apiRequest } from "@/lib/queryClient";
 import Dashboard from "@/pages/Dashboard";
+import DemoDashboard from "@/pages/DemoDashboard";
 import AuthPage from "@/pages/AuthPage";
 import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import NotFound from "@/pages/not-found";
@@ -48,7 +49,12 @@ function AppRoutes() {
   }
 
   if (!session) {
-    return <AuthPage />;
+    return (
+      <Switch hook={useHashLocation}>
+        <Route path="/auth" component={AuthPage} />
+        <Route component={DemoDashboard} />
+      </Switch>
+    );
   }
 
   return (

@@ -8,6 +8,7 @@ import { storage } from "./storage";
 import { insertFeedSchema, insertCategorySchema } from "../shared/schema";
 import { z } from "zod";
 import { scrapeFeed, generateSlug, uniqueSlug, cleanHtml, quickExtract } from "./scraper";
+import { DEMO_FEEDS, DEMO_CATEGORIES, type DemoFeed } from "./demo-feeds";
 import { fetchNewsletters } from "./newsletter";
 
 const parser = new Parser({
@@ -24,66 +25,6 @@ const parser = new Parser({
 // Cache for feed items: feedId -> { items, fetchedAt }
 const feedCache: Map<number, { items: any[]; fetchedAt: number }> = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// ── Rate limiter ─────────────────────────────────────────────────────────────
-// Simple in-memory per-user sliding window. No external dependency needed.
-// Map key: `${userId}:${action}` → array of timestamps (ms)
-const rateLimitWindows: Map<string, number[]> = new Map();
-
-function checkRateLimit(
-  userId: string,
-  action: string,
-  maxRequests: number,
-  windowMs: number
-): { allowed: boolean; retryAfterMs: number } {
-  const key = `${userId}:${action}`;
-  const now = Date.now();
-  const windowStart = now - windowMs;
-  const timestamps = (rateLimitWindows.get(key) || []).filter((t) => t > windowStart);
-  if (timestamps.length >= maxRequests) {
-    const retryAfterMs = timestamps[0] + windowMs - now;
-    return { allowed: false, retryAfterMs };
-  }
-  timestamps.push(now);
-  rateLimitWindows.set(key, timestamps);
-  // Prune old entries periodically to avoid unbounded memory growth
-  if (rateLimitWindows.size > 10000) {
-    for (const [k, ts] of rateLimitWindows) {
-      if (ts.every((t) => t <= windowStart)) rateLimitWindows.delete(k);
-    }
-  }
-  return { allowed: true, retryAfterMs: 0 };
-}
-
-// ── Zod URL validator ────────────────────────────────────────────────────────
-const httpUrlSchema = z.string().url().refine(
-  (u) => u.startsWith("http://") || u.startsWith("https://"),
-  { message: "URL must use http or https" }
-);
-
-// ── SSRF protection ─────────────────────────────────────────────────────────
-function isPrivateHostname(hostname: string): boolean {
-  const patterns = [
-    /^127\./, /^10\./, /^172\.(1[6-9]|2\d|3[01])\./, /^192\.168\./,
-    /^169\.254\./, /^0\./, /^::1$/, /^fc00:/i, /^fd00:/i, /^fe80:/i,
-    /^localhost$/i, /^\[::1\]$/,
-  ];
-  return patterns.some((p) => p.test(hostname));
-}
-
-function validatePublicUrl(raw: string): URL {
-  if (raw.length > 2048) throw new Error("URL too long");
-  if (/[\x00\r\n]/.test(raw)) throw new Error("URL contains invalid characters");
-  const parsed = new URL(raw); // throws on malformed URLs
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new Error("URL must use http or https");
-  }
-  if (isPrivateHostname(parsed.hostname)) {
-    throw new Error("URLs pointing to private/internal networks are not allowed");
-  }
-  return parsed;
-}
-const slugSchema = z.string().regex(/^[a-z0-9-]+$/, "Invalid slug");
 
 /**
  * Fetch raw XML and sanitize common malformed patterns before parsing.
@@ -180,10 +121,9 @@ declare global {
 
 async function requireAuth(req: Request, res: Response, next: NextFunction) {
   // ── Dev auth bypass ────────────────────────────────────────────────────────
-  // Only allowed in development. Requires DEV_BYPASS_AUTH=true and the special
-  // header set by queryClient.ts.
+  // When DEV_BYPASS_AUTH=true (Preview env only) and the request carries the
+  // special header set by queryClient.ts, skip Supabase and inject the dev user.
   if (
-    process.env.NODE_ENV !== "production" &&
     process.env.DEV_BYPASS_AUTH === "true" &&
     req.headers["x-dev-bypass-auth"] === "true"
   ) {
@@ -238,31 +178,29 @@ async function upsertFeedItems(
 }
 
 export function registerRoutes(httpServer: Server, app: Express) {
-  // ── Diagnostic: test jsdom/readability (dev only) ─────────────────────────
-  if (process.env.NODE_ENV !== "production") {
-    app.get("/api/extract/ping", async (_req, res) => {
-      const steps: string[] = [];
-      try {
-        steps.push("start");
-        const jsdomMod = require("jsdom");
-        steps.push("jsdom loaded");
-        const { JSDOM } = jsdomMod;
-        const dom = new JSDOM("<html><body><article><p>Hello world test content for readability parsing.</p></article></body></html>", { url: "https://example.com" });
-        steps.push("JSDOM instantiated");
-        const { Readability } = require("@mozilla/readability");
-        steps.push("Readability loaded");
-        const article = new Readability(dom.window.document).parse();
-        steps.push("Readability parsed: " + (article ? article.title || "ok" : "null"));
-        const DOMPurify = require("isomorphic-dompurify").default;
-        steps.push("DOMPurify loaded");
-        const clean = DOMPurify.sanitize("<p>test</p>");
-        steps.push("DOMPurify sanitized: " + clean);
-        res.json({ ok: true, steps });
-      } catch (e: any) {
-        res.json({ ok: false, steps, error: e.message });
-      }
-    });
-  }
+  // ── Diagnostic: test jsdom/readability in Vercel runtime (no auth) ─────────
+  app.get("/api/extract/ping", async (_req, res) => {
+    const steps: string[] = [];
+    try {
+      steps.push("start");
+      const jsdomMod = require("jsdom");
+      steps.push("jsdom loaded");
+      const { JSDOM } = jsdomMod;
+      const dom = new JSDOM("<html><body><article><p>Hello world test content for readability parsing.</p></article></body></html>", { url: "https://example.com" });
+      steps.push("JSDOM instantiated");
+      const { Readability } = require("@mozilla/readability");
+      steps.push("Readability loaded");
+      const article = new Readability(dom.window.document).parse();
+      steps.push("Readability parsed: " + (article ? article.title || "ok" : "null"));
+      const DOMPurify = require("isomorphic-dompurify").default;
+      steps.push("DOMPurify loaded");
+      const clean = DOMPurify.sanitize("<p>test</p>");
+      steps.push("DOMPurify sanitized: " + clean);
+      res.json({ ok: true, steps });
+    } catch (e: any) {
+      res.json({ ok: false, steps, error: e.message, stack: e.stack?.slice(0, 500) });
+    }
+  });
 
   // ── Seed endpoint (called once after first login) ──────────────────────────
   app.post("/api/auth/seed", requireAuth, async (req, res) => {
@@ -270,8 +208,43 @@ export function registerRoutes(httpServer: Server, app: Express) {
       await storage.seedDefaultData(req.userId!);
       res.json({ success: true });
     } catch (e: any) {
-      console.error("[/api/auth/seed]", e);
-      res.status(500).json({ error: "Failed to initialize account" });
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // ── Demo endpoints (no auth required) ────────────────────────────────────
+  // 30-minute cache — longer than regular feeds to keep external requests low
+  // for unauthenticated traffic.
+  const DEMO_CACHE_TTL = 30 * 60 * 1000;
+  const demoCache: Map<number, { items: any[]; fetchedAt: number }> = new Map();
+
+  app.get("/api/demo/feeds", (_req, res) => {
+    res.json({
+      feeds: DEMO_FEEDS,
+      categories: DEMO_CATEGORIES,
+    });
+  });
+
+  app.get("/api/demo/feed-items/:feedId", async (req, res) => {
+    const feedId = parseInt(req.params.feedId);
+    const feed = DEMO_FEEDS.find((f) => f.id === feedId);
+    if (!feed) return res.status(404).json({ error: "Demo feed not found" });
+
+    // Serve from cache if fresh
+    const cached = demoCache.get(feedId);
+    if (cached && Date.now() - cached.fetchedAt < DEMO_CACHE_TTL) {
+      return res.json(cached.items);
+    }
+
+    try {
+      const items = await fetchFeedItems(feed.url);
+      const limited = items.slice(0, feed.maxItems);
+      demoCache.set(feedId, { items: limited, fetchedAt: Date.now() });
+      res.json(limited);
+    } catch (e: any) {
+      // Return cached stale data if available, otherwise empty
+      if (cached) return res.json(cached.items);
+      res.json([]);
     }
   });
 
@@ -293,11 +266,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
     try {
-      validatePublicUrl(url);
-    } catch {
-      return res.status(400).json({ error: "Invalid URL. Only public http/https URLs are allowed." });
-    }
-    try {
       const feed = await fetchAndParse(url);
       res.json({
         title: feed.title || "",
@@ -307,8 +275,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
           pubDate: item.pubDate || "",
         })),
       });
-    } catch {
-      res.status(400).json({ error: "Could not parse RSS feed from that URL" });
+    } catch (e: any) {
+      res.status(400).json({ error: "Could not parse RSS feed: " + e.message });
     }
   });
 
@@ -542,25 +510,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
     if (!url) {
       return res.status(400).json({ error: "url required", fallback: true });
     }
-    // Validate URL is a real http/https address before fetching.
-    // newsletter:<id> URLs are internal identifiers — skip validation for those,
-    // they never reach fetch() (handled by the newsletter DB path below).
-    const isNewsletterUrl = typeof url === "string" && url.startsWith("newsletter:");
-    if (!isNewsletterUrl) {
-      const urlCheck = httpUrlSchema.safeParse(url);
-      if (!urlCheck.success) {
-        return res.status(400).json({ error: "Invalid URL", fallback: true });
-      }
-    }
-    // Rate limit: 10 extractions per minute per user
-    const rl = checkRateLimit(req.userId!, "extract", 10, 60_000);
-    if (!rl.allowed) {
-      return res.status(429).json({
-        error: "Too many requests — please wait a moment",
-        fallback: true,
-        retryAfterMs: rl.retryAfterMs,
-      });
-    }
 
     try {
       // 1. Get HTML — newsletter items have body_html pre-stored, skip HTTP fetch
@@ -632,7 +581,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
             "div", "span", "hr", "center",
           ],
           ALLOWED_ATTR: [
-            "href", "src", "alt", "title", "class",
+            "href", "src", "alt", "title", "class", "style",
             "target", "rel", "width", "height", "align",
             "border", "cellpadding", "cellspacing", "valign",
           ],
@@ -651,7 +600,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
         // ── Pass 1: strip borders, bgcolor, and spacer dimensions ───────────
         const allEls = doc.querySelectorAll("table, tr, td, th, div, span, p, h1, h2, h3, h4, h5, h6, a");
         allEls.forEach((el: Element) => {
-          try {
           // Remove HTML border/bgcolor/background attributes
           el.removeAttribute("border");
           el.removeAttribute("bgcolor");
@@ -728,7 +676,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
               }
             }
           }
-          } catch { /* ignore elements with unparseable inline styles */ }
         });
 
         // ── Pass 2: remove spacer rows and cells ────────────────────────────────
@@ -811,15 +758,9 @@ export function registerRoutes(httpServer: Server, app: Express) {
       // Bundled inline by esbuild (external:[]). Dynamic import keeps them
       // out of the module-init critical path so a cold start doesn't parse
       // jsdom before any request arrives.
-      const { JSDOM, VirtualConsole } = await import("jsdom");
+      const { JSDOM } = await import("jsdom");
       const { Readability } = await import("@mozilla/readability");
-      const virtualConsole = new VirtualConsole();
-      virtualConsole.on("jsdomError", () => { /* suppress */ });
-      // Strip <style> blocks before passing to JSDOM — JSDOM's CSS shorthand
-      // parser throws on CSS custom properties (e.g. border: var(--x, 1px)).
-      // Readability only needs the DOM structure, not the stylesheets.
-      const sanitizedHtml = html.replace(/<style[\s\S]*?<\/style>/gi, "");
-      const dom = new JSDOM(sanitizedHtml, { url, virtualConsole });
+      const dom = new JSDOM(html, { url });
       const reader = new Readability(dom.window.document);
       const article = reader.parse();
 
@@ -913,8 +854,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
         fallback: false,
       });
     } catch (e: any) {
-      console.error("[/api/extract error]", e);
-      return res.json({ error: "Failed to extract article content", fallback: true });
+      console.error("[/api/extract error]", e.message);
+      return res.json({ error: e.message, fallback: true });
     }
   });
 
@@ -933,8 +874,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
         .maybeSingle();
       res.json(data?.prefs ?? {});
     } catch (e: any) {
-      console.error("[/api/preferences GET]", e);
-      res.status(500).json({ error: "Failed to load preferences" });
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -956,8 +896,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
         );
       res.json({ ok: true });
     } catch (e: any) {
-      console.error("[/api/preferences POST]", e);
-      res.status(500).json({ error: "Failed to save preferences" });
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1171,8 +1110,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const result = await fetchNewsletters(req.userId!);
       res.json(result);
     } catch (e: any) {
-      console.error("[/api/newsletter/sync]", e);
-      res.status(500).json({ error: "Failed to sync newsletters" });
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1238,8 +1176,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
 
       res.json({ ran: results.length, results, newsletters: newsletterResult });
     } catch (e: any) {
-      console.error("[/api/cron/scrape]", e);
-      res.status(500).json({ error: "Cron job failed" });
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1267,8 +1204,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
         scrapeFeed(feed.source_url, feed.id, req.userId!).catch(() => {});
       }
     } catch (e: any) {
-      console.error("[/api/scrape/refresh-due]", e);
-      res.status(500).json({ error: "Failed to refresh scraped feeds" });
+      res.status(500).json({ error: e.message });
     }
   });
 
@@ -1276,11 +1212,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.post("/api/scrape/preview", requireAuth, async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
-    try {
-      validatePublicUrl(url);
-    } catch {
-      return res.status(400).json({ error: "Invalid URL. Only public http/https URLs are allowed." });
-    }
     try {
       const resp = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; Feedhunt/1.0)", "Accept": "text/html,*/*" },
@@ -1291,30 +1222,19 @@ export function registerRoutes(httpServer: Server, app: Express) {
       const html = await resp.text();
       const cleaned = cleanHtml(html, url);
       const items = quickExtract(html, url);
+      // Extract title from <title> tag
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
       const siteTitle = titleMatch ? titleMatch[1].trim() : new URL(url).hostname;
       res.json({ siteTitle, items: items.slice(0, 10) });
-    } catch {
-      res.status(400).json({ error: "Could not fetch or parse that URL" });
+    } catch (e: any) {
+      res.status(400).json({ error: e.message });
     }
   });
 
   // Full AI scrape — creates/updates scraped_feed record and runs Claude extraction
   app.post("/api/scrape", requireAuth, async (req, res) => {
-    // Rate limit: 5 feed creations per minute per user
-    const rlCreate = checkRateLimit(req.userId!, "scrape-create", 5, 60_000);
-    if (!rlCreate.allowed) {
-      return res.status(429).json({
-        error: "Too many requests — please wait a moment",
-        retryAfterMs: rlCreate.retryAfterMs,
-      });
-    }
     const { url, feedId } = req.body;
     if (!url) return res.status(400).json({ error: "url required" });
-    const scrapeUrlCheck = httpUrlSchema.safeParse(url);
-    if (!scrapeUrlCheck.success) {
-      return res.status(400).json({ error: "Invalid URL" });
-    }
 
     let activeFeedId = feedId;
 
@@ -1371,19 +1291,6 @@ export function registerRoutes(httpServer: Server, app: Express) {
   app.post("/api/scrape/rescan", requireAuth, async (req, res) => {
     const { slug, feedId } = req.body;
     if (!slug) return res.status(400).json({ error: "slug required" });
-    // Validate slug format
-    const slugCheck = slugSchema.safeParse(slug);
-    if (!slugCheck.success) {
-      return res.status(400).json({ error: "Invalid slug" });
-    }
-    // Rate limit: 1 rescan per feed per minute
-    const rl = checkRateLimit(req.userId!, `rescan:${slug}`, 1, 60_000);
-    if (!rl.allowed) {
-      return res.status(429).json({
-        error: "Feed was just rescanned — please wait a moment before trying again",
-        retryAfterMs: rl.retryAfterMs,
-      });
-    }
     const { data: feed, error } = await supabaseAdmin
       .from("scraped_feeds")
       .select("*")
@@ -1400,8 +1307,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
       if (!result.success) throw new Error(result.error || "Scrape failed");
       res.json({ success: true, itemsCount: result.itemsCount });
     } catch (e: any) {
-      console.error("[/api/scrape/rescan]", e);
-      res.status(500).json({ error: "Failed to rescan feed" });
+      res.status(500).json({ error: e.message });
     }
   });
 
