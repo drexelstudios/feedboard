@@ -648,7 +648,8 @@ export function registerRoutes(httpServer: Server, app: Express) {
           el.removeAttribute("background");
           // Strip border-related CSS from inline styles
           const style = (el as HTMLElement).style;
-          if (style) {
+          if (style && typeof style.removeProperty === "function") {
+            try {
             style.removeProperty("border");
             style.removeProperty("border-top");
             style.removeProperty("border-right");
@@ -717,6 +718,7 @@ export function registerRoutes(httpServer: Server, app: Express) {
                 style.setProperty("padding-right", pr);
               }
             }
+            } catch { /* JSDOM may fail on malformed inline styles (e.g. CSS custom properties) */ }
           }
         });
 
@@ -802,7 +804,15 @@ export function registerRoutes(httpServer: Server, app: Express) {
       // jsdom before any request arrives.
       const { JSDOM } = await import("jsdom");
       const { Readability } = await import("@mozilla/readability");
-      const dom = new JSDOM(html, { url });
+
+      // Strip problematic inline styles that crash JSDOM's CSS parser
+      // (e.g. style="var(--border-width, 1px)" is not valid for the style attribute)
+      const cleanedForParsing = html.replace(
+        /style="[^"]*var\(--[^"]*"/gi,
+        'style=""'
+      );
+
+      const dom = new JSDOM(cleanedForParsing, { url });
       const reader = new Readability(dom.window.document);
       const article = reader.parse();
 
