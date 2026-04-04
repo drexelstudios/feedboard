@@ -106,19 +106,19 @@ export default function SearchFeedDialog({ open, onOpenChange, categories }: Sea
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto overflow-x-hidden" data-testid="dialog-search-feed">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" style={{ overflowX: "hidden" }} data-testid="dialog-search-feed">
         <DialogHeader>
           <DialogTitle
             style={{ fontFamily: "var(--font-display)", fontWeight: 700 }}
           >
             Search Feed
           </DialogTitle>
-          <DialogDescription className="text-sm">
+          <DialogDescription className="text-sm" style={{ overflowWrap: "break-word" }}>
             Enter a keyword or topic to create a feed from news search results.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-1">
+        <div className="space-y-4 pt-1 min-w-0 overflow-hidden">
           {/* Keyword */}
           <div className="space-y-1.5">
             <Label htmlFor="search-keyword">Keyword or topic</Label>
@@ -181,9 +181,9 @@ export default function SearchFeedDialog({ open, onOpenChange, categories }: Sea
                 </p>
               </div>
               {preview.items.length > 0 && (
-                <ul className="text-xs space-y-1 min-w-0" style={{ color: "hsl(var(--muted-foreground))" }}>
+                <ul className="text-xs space-y-1" style={{ color: "hsl(var(--muted-foreground))", overflow: "hidden" }}>
                   {preview.items.slice(0, 3).map((item, i) => (
-                    <li key={i} className="truncate">· {item.title}</li>
+                    <li key={i} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {item.title}</li>
                   ))}
                 </ul>
               )}
