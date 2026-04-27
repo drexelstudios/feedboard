@@ -171,7 +171,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
     <div style={{
       background: "hsl(var(--background))",
       border: "1px solid hsl(var(--border))",
-      borderRadius: "var(--radius)",
+      borderRadius: 8,
       padding: "var(--space-3) var(--space-4)",
       display: "flex",
       flexDirection: "column",
@@ -218,7 +218,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
             onClick={onClose}
             style={{
               padding: 6,
-              borderRadius: "var(--radius)",
+              borderRadius: 8,
               color: "hsl(var(--muted-foreground))",
               background: "transparent",
               border: "none",
@@ -242,7 +242,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
               style={{
                 flex: 1,
                 padding: "6px 0",
-                borderRadius: "var(--radius)",
+                borderRadius: 8,
                 fontSize: "var(--text-xs)",
                 fontWeight: 600,
                 border: "1px solid hsl(var(--border))",
@@ -296,7 +296,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
                 <div style={{
                   background: "hsl(var(--background))",
                   border: "1px solid hsl(var(--border))",
-                  borderRadius: "var(--radius)",
+                  borderRadius: 8,
                   padding: "var(--space-3)",
                   overflow: "hidden",
                 }}>
@@ -353,7 +353,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
                   <div style={{
                     background: "hsl(var(--background))",
                     border: "1px solid hsl(var(--border))",
-                    borderRadius: "var(--radius)",
+                    borderRadius: 8,
                     overflow: "hidden",
                   }}>
                     {feedsData!.map((feed, idx) => {
