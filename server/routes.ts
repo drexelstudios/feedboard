@@ -1638,4 +1638,94 @@ export function registerRoutes(httpServer: Server, app: Express) {
       lastOpenedByFeed,
     });
   });
+
+  // GET /api/analytics/admin?days=7|30|all — admin-only aggregate stats across all users
+  const ADMIN_USER_ID = "88b0c21d-1be1-4ab4-bb85-ae6915f57f4e";
+  app.get("/api/analytics/admin", requireAuth, async (req, res) => {
+    if (req.userId !== ADMIN_USER_ID) return res.status(403).json({ error: "Forbidden" });
+
+    const days = req.query.days === "all" ? null : parseInt((req.query.days as string) || "30");
+    const since = days ? new Date(Date.now() - days * 86400_000).toISOString() : null;
+
+    // All opened events across all users
+    let openedQ = supabaseAdmin
+      .from("read_events")
+      .select("user_id, feed_id, item_guid, created_at")
+      .eq("event_type", "opened");
+    if (since) openedQ = openedQ.gte("created_at", since);
+    const { data: openedRows } = await openedQ;
+
+    let browserQ = supabaseAdmin
+      .from("read_events")
+      .select("user_id, created_at")
+      .eq("event_type", "browser");
+    if (since) browserQ = browserQ.gte("created_at", since);
+    const { data: browserRows } = await browserQ;
+
+    let closedQ = supabaseAdmin
+      .from("read_events")
+      .select("duration_sec, created_at")
+      .eq("event_type", "closed")
+      .not("duration_sec", "is", null);
+    if (since) closedQ = closedQ.gte("created_at", since);
+    const { data: closedRows } = await closedQ;
+
+    const opened = openedRows || [];
+    const browser = browserRows || [];
+    const closed = closedRows || [];
+
+    const totalReads = opened.length;
+    const totalBrowser = browser.length;
+    const uniqueUsers = new Set(opened.map((r) => r.user_id)).size;
+
+    // Avg read time
+    const durations = closed.map((r) => r.duration_sec).filter((d): d is number => d != null && d > 5 && d < 3600);
+    const avgReadSec = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+
+    // Top feeds
+    const feedCounts: Record<number, number> = {};
+    for (const r of opened) {
+      if (r.feed_id) feedCounts[r.feed_id] = (feedCounts[r.feed_id] || 0) + 1;
+    }
+    const topFeeds = Object.entries(feedCounts)
+      .map(([feed_id, count]) => ({ feed_id: Number(feed_id), count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Reads per day
+    const readsByDay: Record<string, number> = {};
+    for (const r of opened) {
+      const day = r.created_at.slice(0, 10);
+      readsByDay[day] = (readsByDay[day] || 0) + 1;
+    }
+
+    // Peak hour
+    const hourCounts: Record<number, number> = {};
+    for (const r of opened) {
+      const hour = new Date(r.created_at).getHours();
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    }
+    const peakHour = Object.entries(hourCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0];
+
+    // Reads per user breakdown (top 10 most active users, anonymised as User #1, #2...)
+    const userCounts: Record<string, number> = {};
+    for (const r of opened) {
+      userCounts[r.user_id] = (userCounts[r.user_id] || 0) + 1;
+    }
+    const topUsers = Object.entries(userCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([user_id, count], idx) => ({ label: user_id === ADMIN_USER_ID ? "You" : `User ${idx + 1}`, count }));
+
+    res.json({
+      totalReads,
+      totalBrowser,
+      uniqueUsers,
+      avgReadSec,
+      topFeeds,
+      topUsers,
+      readsByDay,
+      peakHour: peakHour != null ? Number(peakHour) : null,
+    });
+  });
 }

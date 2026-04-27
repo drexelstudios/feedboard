@@ -1,16 +1,16 @@
 /**
- * AnalyticsPanel — slide-in panel showing per-user reading stats
- * Same pattern as SettingsPanel: fixed overlay + animated drawer from the right.
- *
- * Three time ranges: 7 days / 30 days / All time
- * Sections: Overview stats, Activity chart, Top Feeds, Feed Health
+ * AnalyticsPanel — slide-in panel showing reading stats.
+ * - All users: "My Stats" tab (personal) + "All Users" tab (admin-only, rafael only)
+ * - Three time ranges: 7 days / 30 days / All time
+ * - Sections: Overview stats, Activity chart, Top Feeds, Feed Health (My Stats only)
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { X, BookOpen, ExternalLink, Clock, Flame, TrendingUp } from "lucide-react";
+import { X, BookOpen, ExternalLink, Clock, Flame, TrendingUp, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/components/AuthProvider";
-import { cn } from "@/lib/utils";
+
+const ADMIN_USER_ID = "88b0c21d-1be1-4ab4-bb85-ae6915f57f4e";
 
 interface AnalyticsPanelProps {
   isOpen: boolean;
@@ -28,6 +28,17 @@ interface AnalyticsSummary {
   lastOpenedByFeed: Record<number, string>;
 }
 
+interface AdminSummary {
+  totalReads: number;
+  totalBrowser: number;
+  uniqueUsers: number;
+  avgReadSec: number;
+  topFeeds: { feed_id: number; count: number }[];
+  topUsers: { label: string; count: number }[];
+  readsByDay: Record<string, number>;
+  peakHour: number | null;
+}
+
 interface Feed {
   id: number;
   title: string;
@@ -36,6 +47,7 @@ interface Feed {
 }
 
 type TimeRange = "7" | "30" | "all";
+type ViewTab = "mine" | "admin";
 
 function formatDuration(sec: number): string {
   if (sec < 60) return `${sec}s`;
@@ -92,10 +104,133 @@ function MiniBarChart({ data }: { data: Record<string, number> }) {
   );
 }
 
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string | number }) {
+  return (
+    <div style={{
+      background: "hsl(var(--background))",
+      border: "1px solid hsl(var(--border))",
+      borderRadius: 8,
+      padding: "var(--space-3) var(--space-4)",
+      display: "flex",
+      flexDirection: "column",
+      gap: 4,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "hsl(var(--muted-foreground))" }}>
+        {icon}
+        <span style={{ fontSize: "var(--text-xs)", fontWeight: 500 }}>{label}</span>
+      </div>
+      <span style={{ fontSize: "var(--text-xl)", fontWeight: 700, color: "hsl(var(--foreground))", lineHeight: 1.2 }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{
+      fontSize: "var(--text-xs)",
+      fontWeight: 600,
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      color: "hsl(var(--muted-foreground))",
+      marginBottom: "var(--space-3)",
+    }}>
+      {children}
+    </p>
+  );
+}
+
+function TopFeedsList({
+  topFeeds,
+  feedMap,
+}: {
+  topFeeds: { feed_id: number; count: number }[];
+  feedMap: Map<number, Feed>;
+}) {
+  if (!topFeeds.length) return null;
+  const maxCount = topFeeds[0].count;
+  return (
+    <section>
+      <SectionLabel>Top Feeds</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+        {topFeeds.map(({ feed_id, count }, idx) => {
+          const feed = feedMap.get(feed_id);
+          return (
+            <div key={feed_id} style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+              <span style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", width: 14, textAlign: "right", flexShrink: 0 }}>
+                {idx + 1}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                  <span style={{ fontSize: "var(--text-xs)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {feed?.title ?? `Feed ${feed_id}`}
+                  </span>
+                  <span style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", flexShrink: 0, marginLeft: 6 }}>
+                    {count}
+                  </span>
+                </div>
+                <div style={{ height: 3, borderRadius: 2, background: "hsl(var(--border))", overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%",
+                    width: `${Math.round((count / maxCount) * 100)}%`,
+                    background: "hsl(var(--primary))",
+                    borderRadius: 2,
+                  }} />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function TopUsersList({ topUsers }: { topUsers: { label: string; count: number }[] }) {
+  if (!topUsers.length) return null;
+  const maxCount = topUsers[0].count;
+  return (
+    <section>
+      <SectionLabel>Top Readers</SectionLabel>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+        {topUsers.map(({ label, count }, idx) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+            <span style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", width: 14, textAlign: "right", flexShrink: 0 }}>
+              {idx + 1}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                <span style={{ fontSize: "var(--text-xs)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {label}
+                </span>
+                <span style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", flexShrink: 0, marginLeft: 6 }}>
+                  {count}
+                </span>
+              </div>
+              <div style={{ height: 3, borderRadius: 2, background: "hsl(var(--border))", overflow: "hidden" }}>
+                <div style={{
+                  height: "100%",
+                  width: `${Math.round((count / maxCount) * 100)}%`,
+                  background: "hsl(var(--primary))",
+                  borderRadius: 2,
+                }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps) {
   const { session } = useAuth();
   const [range, setRange] = useState<TimeRange>("30");
+  const [view, setView] = useState<ViewTab>("mine");
   const [visible, setVisible] = useState(false);
+
+  const isAdmin = session?.user?.id === ADMIN_USER_ID;
 
   // Animate in/out
   useEffect(() => {
@@ -115,7 +250,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  const { data: summary, isLoading } = useQuery<AnalyticsSummary>({
+  const { data: summary, isLoading: loadingMine } = useQuery<AnalyticsSummary>({
     queryKey: ["/api/analytics/summary", range],
     queryFn: async () => {
       const res = await fetch(`/api/analytics/summary?days=${range}`, {
@@ -124,7 +259,20 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
       if (!res.ok) throw new Error("Failed to load analytics");
       return res.json();
     },
-    enabled: isOpen && !!session,
+    enabled: isOpen && !!session && view === "mine",
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: adminSummary, isLoading: loadingAdmin } = useQuery<AdminSummary>({
+    queryKey: ["/api/analytics/admin", range],
+    queryFn: async () => {
+      const res = await fetch(`/api/analytics/admin?days=${range}`, {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load admin analytics");
+      return res.json();
+    },
+    enabled: isOpen && !!session && isAdmin && view === "admin",
     staleTime: 5 * 60 * 1000,
   });
 
@@ -137,6 +285,9 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
   const feedMap = new Map((feedsData || []).map((f) => [f.id, f]));
 
   if (!isOpen) return null;
+
+  const isLoading = view === "mine" ? loadingMine : loadingAdmin;
+  const currentData = view === "mine" ? summary : adminSummary;
 
   const panelStyle: React.CSSProperties = {
     position: "fixed",
@@ -167,24 +318,30 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
     overflowY: "auto",
   };
 
-  const statCard = (icon: React.ReactNode, label: string, value: string | number) => (
-    <div style={{
-      background: "hsl(var(--background))",
-      border: "1px solid hsl(var(--border))",
-      borderRadius: 8,
-      padding: "var(--space-3) var(--space-4)",
-      display: "flex",
-      flexDirection: "column",
-      gap: 4,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, color: "hsl(var(--muted-foreground))" }}>
-        {icon}
-        <span style={{ fontSize: "var(--text-xs)", fontWeight: 500 }}>{label}</span>
-      </div>
-      <span style={{ fontSize: "var(--text-xl)", fontWeight: 700, color: "hsl(var(--foreground))", lineHeight: 1.2 }}>
-        {value}
-      </span>
-    </div>
+  const tabBtn = (t: ViewTab, label: string, icon: React.ReactNode) => (
+    <button
+      key={t}
+      onClick={() => setView(t)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        flex: 1,
+        justifyContent: "center",
+        padding: "7px 0",
+        borderRadius: 8,
+        fontSize: "var(--text-xs)",
+        fontWeight: 600,
+        border: "1px solid hsl(var(--border))",
+        cursor: "pointer",
+        background: view === t ? "hsl(var(--primary))" : "transparent",
+        color: view === t ? "hsl(var(--primary-foreground))" : "hsl(var(--muted-foreground))",
+        transition: "all 0.15s",
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   );
 
   return (
@@ -211,7 +368,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
               Reading Analytics
             </h2>
             <p style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", margin: 0 }}>
-              Your personal reading stats
+              {view === "admin" ? "All users · aggregate stats" : "Your personal reading stats"}
             </p>
           </div>
           <button
@@ -229,11 +386,23 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
           </button>
         </div>
 
+        {/* View tabs — only shown to admin */}
+        {isAdmin && (
+          <div style={{
+            display: "flex",
+            gap: 4,
+            padding: "var(--space-4) var(--space-5) 0",
+          }}>
+            {tabBtn("mine", "My Stats", <BookOpen size={12} />)}
+            {tabBtn("admin", "All Users", <Users size={12} />)}
+          </div>
+        )}
+
         {/* Time range tabs */}
         <div style={{
           display: "flex",
           gap: 4,
-          padding: "var(--space-4) var(--space-5) 0",
+          padding: `var(--space-3) var(--space-5) 0`,
         }}>
           {(["7", "30", "all"] as TimeRange[]).map((r) => (
             <button
@@ -268,18 +437,16 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
                 animation: "spin 0.7s linear infinite",
               }} />
             </div>
-          ) : (
+          ) : view === "mine" ? (
             <>
-              {/* Overview stats grid */}
+              {/* Overview stats */}
               <section>
-                <p style={{ fontSize: "var(--text-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "hsl(var(--muted-foreground))", marginBottom: "var(--space-3)" }}>
-                  Overview
-                </p>
+                <SectionLabel>Overview</SectionLabel>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
-                  {statCard(<BookOpen size={12} />, "Articles read", summary?.totalReads ?? 0)}
-                  {statCard(<Flame size={12} />, "Day streak", `${summary?.streak ?? 0}🔥`)}
-                  {statCard(<Clock size={12} />, "Avg read time", summary?.avgReadSec ? formatDuration(summary.avgReadSec) : "—")}
-                  {statCard(<ExternalLink size={12} />, "Opened in browser", summary?.totalBrowser ?? 0)}
+                  <StatCard icon={<BookOpen size={12} />} label="Articles read" value={summary?.totalReads ?? 0} />
+                  <StatCard icon={<Flame size={12} />} label="Day streak" value={`${summary?.streak ?? 0}🔥`} />
+                  <StatCard icon={<Clock size={12} />} label="Avg read time" value={summary?.avgReadSec ? formatDuration(summary.avgReadSec) : "—"} />
+                  <StatCard icon={<ExternalLink size={12} />} label="Opened in browser" value={summary?.totalBrowser ?? 0} />
                 </div>
                 {summary?.peakHour != null && (
                   <p style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", marginTop: "var(--space-2)" }}>
@@ -290,9 +457,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
 
               {/* Activity chart */}
               <section>
-                <p style={{ fontSize: "var(--text-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "hsl(var(--muted-foreground))", marginBottom: "var(--space-3)" }}>
-                  Daily Activity
-                </p>
+                <SectionLabel>Daily Activity</SectionLabel>
                 <div style={{
                   background: "hsl(var(--background))",
                   border: "1px solid hsl(var(--border))",
@@ -305,51 +470,12 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
               </section>
 
               {/* Top feeds */}
-              {(summary?.topFeeds?.length ?? 0) > 0 && (
-                <section>
-                  <p style={{ fontSize: "var(--text-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "hsl(var(--muted-foreground))", marginBottom: "var(--space-3)" }}>
-                    Top Feeds
-                  </p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-                    {summary!.topFeeds.map(({ feed_id, count }, idx) => {
-                      const feed = feedMap.get(feed_id);
-                      const maxCount = summary!.topFeeds[0].count;
-                      return (
-                        <div key={feed_id} style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                          <span style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", width: 14, textAlign: "right", flexShrink: 0 }}>
-                            {idx + 1}
-                          </span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                              <span style={{ fontSize: "var(--text-xs)", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {feed?.title ?? `Feed ${feed_id}`}
-                              </span>
-                              <span style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", flexShrink: 0, marginLeft: 6 }}>
-                                {count}
-                              </span>
-                            </div>
-                            <div style={{ height: 3, borderRadius: 2, background: "hsl(var(--border))", overflow: "hidden" }}>
-                              <div style={{
-                                height: "100%",
-                                width: `${Math.round((count / maxCount) * 100)}%`,
-                                background: "hsl(var(--primary))",
-                                borderRadius: 2,
-                              }} />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
+              <TopFeedsList topFeeds={summary?.topFeeds ?? []} feedMap={feedMap} />
 
               {/* Feed health */}
               {(feedsData?.length ?? 0) > 0 && (
                 <section>
-                  <p style={{ fontSize: "var(--text-xs)", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "hsl(var(--muted-foreground))", marginBottom: "var(--space-3)" }}>
-                    Feed Health
-                  </p>
+                  <SectionLabel>Feed Health</SectionLabel>
                   <div style={{
                     background: "hsl(var(--background))",
                     border: "1px solid hsl(var(--border))",
@@ -396,11 +522,59 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
               )}
 
               {/* Empty state */}
-              {!isLoading && (summary?.totalReads ?? 0) === 0 && (
+              {(summary?.totalReads ?? 0) === 0 && (
                 <div style={{ textAlign: "center", paddingTop: 40, color: "hsl(var(--muted-foreground))" }}>
                   <TrendingUp size={32} style={{ margin: "0 auto 8px", opacity: 0.3 }} />
                   <p style={{ fontSize: "var(--text-sm)", margin: 0 }}>No reading activity yet</p>
                   <p style={{ fontSize: "var(--text-xs)", margin: "4px 0 0" }}>Start reading articles to see your stats here.</p>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Admin view */
+            <>
+              {/* Overview stats */}
+              <section>
+                <SectionLabel>Overview</SectionLabel>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-2)" }}>
+                  <StatCard icon={<BookOpen size={12} />} label="Total reads" value={adminSummary?.totalReads ?? 0} />
+                  <StatCard icon={<Users size={12} />} label="Active readers" value={adminSummary?.uniqueUsers ?? 0} />
+                  <StatCard icon={<Clock size={12} />} label="Avg read time" value={adminSummary?.avgReadSec ? formatDuration(adminSummary.avgReadSec) : "—"} />
+                  <StatCard icon={<ExternalLink size={12} />} label="Browser opens" value={adminSummary?.totalBrowser ?? 0} />
+                </div>
+                {adminSummary?.peakHour != null && (
+                  <p style={{ fontSize: "var(--text-xs)", color: "hsl(var(--muted-foreground))", marginTop: "var(--space-2)" }}>
+                    Peak hour across all users: <strong style={{ color: "hsl(var(--foreground))" }}>{formatHour(adminSummary.peakHour)}</strong>
+                  </p>
+                )}
+              </section>
+
+              {/* Activity chart */}
+              <section>
+                <SectionLabel>Daily Activity</SectionLabel>
+                <div style={{
+                  background: "hsl(var(--background))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: 8,
+                  padding: "var(--space-3)",
+                  overflow: "hidden",
+                }}>
+                  <MiniBarChart data={adminSummary?.readsByDay ?? {}} />
+                </div>
+              </section>
+
+              {/* Top feeds */}
+              <TopFeedsList topFeeds={adminSummary?.topFeeds ?? []} feedMap={feedMap} />
+
+              {/* Top readers */}
+              <TopUsersList topUsers={adminSummary?.topUsers ?? []} />
+
+              {/* Empty state */}
+              {(adminSummary?.totalReads ?? 0) === 0 && (
+                <div style={{ textAlign: "center", paddingTop: 40, color: "hsl(var(--muted-foreground))" }}>
+                  <Users size={32} style={{ margin: "0 auto 8px", opacity: 0.3 }} />
+                  <p style={{ fontSize: "var(--text-sm)", margin: 0 }}>No user activity yet</p>
+                  <p style={{ fontSize: "var(--text-xs)", margin: "4px 0 0" }}>Activity will appear here once users start reading.</p>
                 </div>
               )}
             </>
