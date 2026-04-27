@@ -96,6 +96,39 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
 
+  // Analytics: track when pane was opened so we can compute duration on close
+  const openedAtRef = useRef<number | null>(null);
+
+  // ── Analytics event firing ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (isOpen && item) {
+      // Record open time
+      openedAtRef.current = Date.now();
+      // Fire opened event (fire-and-forget)
+      apiRequest("POST", "/api/analytics/event", {
+        feed_id: item.feedId,
+        item_guid: item.itemId ?? item.link,
+        event_type: "opened",
+      }).catch(() => {});
+    } else if (!isOpen && openedAtRef.current !== null) {
+      // Fire closed event with duration
+      const duration_sec = Math.round((Date.now() - openedAtRef.current) / 1000);
+      openedAtRef.current = null;
+      // Capture item ref values synchronously before effect cleanup
+      const feedId = item?.feedId;
+      const itemGuid = item?.itemId ?? item?.link;
+      if (feedId && itemGuid) {
+        apiRequest("POST", "/api/analytics/event", {
+          feed_id: feedId,
+          item_guid: itemGuid,
+          event_type: "closed",
+          duration_sec,
+        }).catch(() => {});
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, item?.itemId, item?.link]);
+
   // ── Content loading ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isOpen || !item) return;
@@ -336,6 +369,14 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
     ? (item.viewOnlineUrl || null)
     : item.link;
 
+  const handleOpenInBrowser = useCallback(() => {
+    apiRequest("POST", "/api/analytics/event", {
+      feed_id: item.feedId,
+      item_guid: item.itemId ?? item.link,
+      event_type: "browser",
+    }).catch(() => {});
+  }, [item]);
+
   return (
     <>
       {isOpen && (
@@ -411,6 +452,7 @@ export default function ReadingPane({ item, isOpen, onClose }: ReadingPaneProps)
               rel="noopener noreferrer"
               aria-label="Open original article"
               className="reading-pane__external reading-pane__external--desktop"
+              onClick={handleOpenInBrowser}
             >
               <ExternalLink size={15} />
             </a>

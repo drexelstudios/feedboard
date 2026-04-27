@@ -8,11 +8,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, RefreshCw, LogOut, Sparkles, Settings, Search, Rss } from "lucide-react";
+import { Plus, RefreshCw, LogOut, Sparkles, Settings, Search, Rss, BarChart2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Feed } from "@shared/schema";
 import SettingsPanel from "@/components/SettingsPanel";
+import AnalyticsPanel from "@/components/AnalyticsPanel";
 
 interface HeaderProps {
   onAddFeed: () => void;
@@ -24,6 +25,7 @@ export default function Header({ onAddFeed, onCreateFeed, onSearchFeed }: Header
   const { user, signOut } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   const { data: feeds = [] } = useQuery<Feed[]>({ queryKey: ["/api/feeds"] });
 
@@ -190,6 +192,14 @@ export default function Header({ onAddFeed, onCreateFeed, onSearchFeed }: Header
                     Signed in
                   </p>
                 </div>
+                <DropdownMenuItem
+                  data-testid="button-analytics"
+                  onClick={() => setAnalyticsOpen(true)}
+                  className="gap-2 cursor-pointer"
+                >
+                  <BarChart2 size={14} />
+                  Analytics
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   data-testid="button-sign-out"
@@ -207,6 +217,7 @@ export default function Header({ onAddFeed, onCreateFeed, onSearchFeed }: Header
       </header>
 
       <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <AnalyticsPanel isOpen={analyticsOpen} onClose={() => setAnalyticsOpen(false)} />
     </>
   );
 }

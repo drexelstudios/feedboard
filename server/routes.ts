@@ -1506,4 +1506,136 @@ export function registerRoutes(httpServer: Server, app: Express) {
     res.setHeader("Cache-Control", "public, s-maxage=900, stale-while-revalidate=1800");
     res.send(xml);
   });
+
+  // ── Analytics ─────────────────────────────────────────────────────────────
+
+  // POST /api/analytics/event — fire-and-forget, never blocks the UI
+  app.post("/api/analytics/event", requireAuth, async (req, res) => {
+    const { feed_id, item_guid, event_type, duration_sec } = req.body;
+    if (!event_type || !["opened", "closed", "browser"].includes(event_type)) {
+      return res.status(400).json({ error: "invalid event_type" });
+    }
+    // Rate limit: 120 events/min per user (generous for normal reading)
+    const rl = checkRateLimit(req.userId!, "analytics", 120, 60_000);
+    if (!rl.allowed) return res.status(429).json({ error: "rate limited" });
+
+    const { error } = await supabaseAdmin
+      .from("read_events")
+      .insert({
+        user_id: req.userId,
+        feed_id: feed_id ?? null,
+        item_guid: item_guid ?? null,
+        event_type,
+        duration_sec: duration_sec ?? null,
+      });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ ok: true });
+  });
+
+  // GET /api/analytics/summary?days=7|30|all
+  app.get("/api/analytics/summary", requireAuth, async (req, res) => {
+    const days = req.query.days === "all" ? null : parseInt((req.query.days as string) || "30");
+    const since = days ? new Date(Date.now() - days * 86400_000).toISOString() : null;
+
+    // Base filter
+    let openedQ = supabaseAdmin
+      .from("read_events")
+      .select("feed_id, item_guid, duration_sec, created_at")
+      .eq("user_id", req.userId!)
+      .eq("event_type", "opened");
+    if (since) openedQ = openedQ.gte("created_at", since);
+    const { data: openedRows } = await openedQ;
+
+    let browserQ = supabaseAdmin
+      .from("read_events")
+      .select("feed_id, created_at")
+      .eq("user_id", req.userId!)
+      .eq("event_type", "browser");
+    if (since) browserQ = browserQ.gte("created_at", since);
+    const { data: browserRows } = await browserQ;
+
+    let closedQ = supabaseAdmin
+      .from("read_events")
+      .select("duration_sec, created_at")
+      .eq("user_id", req.userId!)
+      .eq("event_type", "closed")
+      .not("duration_sec", "is", null);
+    if (since) closedQ = closedQ.gte("created_at", since);
+    const { data: closedRows } = await closedQ;
+
+    const opened = openedRows || [];
+    const browser = browserRows || [];
+    const closed = closedRows || [];
+
+    // Total reads
+    const totalReads = opened.length;
+    const totalBrowser = browser.length;
+
+    // Avg reading time (seconds)
+    const durations = closed.map((r) => r.duration_sec).filter((d): d is number => d != null && d > 5 && d < 3600);
+    const avgReadSec = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0;
+
+    // Reads per feed
+    const feedCounts: Record<number, number> = {};
+    for (const r of opened) {
+      if (r.feed_id) feedCounts[r.feed_id] = (feedCounts[r.feed_id] || 0) + 1;
+    }
+    const topFeeds = Object.entries(feedCounts)
+      .map(([feed_id, count]) => ({ feed_id: Number(feed_id), count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Reads per day (for sparkline)
+    const readsByDay: Record<string, number> = {};
+    for (const r of opened) {
+      const day = r.created_at.slice(0, 10);
+      readsByDay[day] = (readsByDay[day] || 0) + 1;
+    }
+
+    // Most active hour
+    const hourCounts: Record<number, number> = {};
+    for (const r of opened) {
+      const hour = new Date(r.created_at).getHours();
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    }
+    const peakHour = Object.entries(hourCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0]?.[0];
+
+    // Reading streak (days with at least 1 open)
+    const allDays = new Set(
+      (await supabaseAdmin
+        .from("read_events")
+        .select("created_at")
+        .eq("user_id", req.userId!)
+        .eq("event_type", "opened")
+      ).data?.map((r) => r.created_at.slice(0, 10)) || []
+    );
+    let streak = 0;
+    const today = new Date();
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      if (allDays.has(key)) streak++;
+      else if (i > 0) break; // gap — streak ends
+    }
+
+    // Feed health: last opened per feed
+    const lastOpenedByFeed: Record<number, string> = {};
+    for (const r of opened) {
+      if (r.feed_id && (!lastOpenedByFeed[r.feed_id] || r.created_at > lastOpenedByFeed[r.feed_id])) {
+        lastOpenedByFeed[r.feed_id] = r.created_at;
+      }
+    }
+
+    res.json({
+      totalReads,
+      totalBrowser,
+      avgReadSec,
+      topFeeds,
+      readsByDay,
+      peakHour: peakHour != null ? Number(peakHour) : null,
+      streak,
+      lastOpenedByFeed,
+    });
+  });
 }
