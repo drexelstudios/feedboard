@@ -60,7 +60,8 @@ function AppRoutes() {
   return (
     <Switch hook={useHashLocation}>
       <Route path="/" component={Dashboard} />
-      <Route component={NotFound} />
+      {/* Catch post-auth redirects (e.g. /auth/callback) and send to dashboard */}
+      <Route component={() => { window.location.replace("/#/"); return null; }} />
     </Switch>
   );
 }
