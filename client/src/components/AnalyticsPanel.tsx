@@ -298,6 +298,7 @@ export default function AnalyticsPanel({ isOpen, onClose }: AnalyticsPanelProps)
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "var(--radius)",
                   padding: "var(--space-3)",
+                  overflow: "hidden",
                 }}>
                   <MiniBarChart data={summary?.readsByDay ?? {}} />
                 </div>
